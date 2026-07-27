@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'providers/expense_provider.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   // Ensure status bar styling is transparent & matches theme
@@ -102,7 +103,7 @@ class MyApp extends StatelessWidget {
             bodyMedium: TextStyle(fontFamily: 'Roboto', color: Color(0xFF9CA3AF)),
           ),
         ),
-        home: const DashboardScreen(),
+       home: const SplashScreen(),
       ),
     );
   }
