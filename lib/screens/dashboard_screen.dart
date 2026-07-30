@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/expense_provider.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/expense_chart.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
 import 'history_screen.dart';
+import 'login_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -22,17 +24,19 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = ExpenseScope.of(context);
     final theme = Theme.of(context);
+    final user = FirebaseAuth.instance.currentUser;
+    final displayName = user?.displayName ?? user?.email?.split('@')[0] ?? 'User';
     
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Hello, Nipun',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              'Hello, $displayName',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            Text(
+            const Text(
               'Track your daily expenses',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: Colors.white70),
             ),
@@ -41,11 +45,35 @@ class DashboardScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.history_rounded),
+            tooltip: 'History',
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const HistoryScreen()),
               );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Logout',
+            onPressed: () async {
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              try {
+                await FirebaseAuth.instance.signOut();
+                if (!context.mounted) return;
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              } catch (e) {
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to sign out: $e'),
+                    backgroundColor: theme.colorScheme.error,
+                  ),
+                );
+              }
             },
           ),
           const SizedBox(width: 8),

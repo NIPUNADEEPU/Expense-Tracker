@@ -46,6 +46,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '812151452516',
     projectId: 'spendsense-b8559',
     authDomain: 'spendsense-b8559.firebaseapp.com',
+    databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
     measurementId: 'G-LDX5QNNY9C',
   );
@@ -55,6 +56,7 @@ class DefaultFirebaseOptions {
     appId: '1:812151452516:android:c87952e773390e1c118071',
     messagingSenderId: '812151452516',
     projectId: 'spendsense-b8559',
+    databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
   );
 
@@ -63,6 +65,7 @@ class DefaultFirebaseOptions {
     appId: '1:812151452516:ios:35d413196d1b9830118071',
     messagingSenderId: '812151452516',
     projectId: 'spendsense-b8559',
+    databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
     iosBundleId: 'com.tracker.expenseTracker',
   );
@@ -72,6 +75,7 @@ class DefaultFirebaseOptions {
     appId: '1:812151452516:ios:35d413196d1b9830118071',
     messagingSenderId: '812151452516',
     projectId: 'spendsense-b8559',
+    databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
     iosBundleId: 'com.tracker.expenseTracker',
   );
@@ -82,6 +86,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '812151452516',
     projectId: 'spendsense-b8559',
     authDomain: 'spendsense-b8559.firebaseapp.com',
+    databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
     measurementId: 'G-5VKTQL1BZ1',
   );
