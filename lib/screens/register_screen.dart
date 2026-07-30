@@ -1,7 +1,113 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'dashboard_screen.dart';
 
-class RegisterScreen extends StatelessWidget {
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill in all fields"),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Passwords do not match"),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      await credential.user?.updateDisplayName(name);
+
+      final uid = credential.user?.uid;
+      if (uid != null) {
+        await FirebaseDatabase.instance.ref('users/$uid/profile').set({
+          'name': name,
+          'email': email,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      }
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const DashboardScreen(),
+        ),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message ?? "Registration failed"),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("An error occurred: $e"),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +154,7 @@ class RegisterScreen extends StatelessWidget {
                 const SizedBox(height: 40),
 
                 TextField(
+                  controller: _nameController,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: "Full Name",
@@ -65,6 +172,8 @@ class RegisterScreen extends StatelessWidget {
                 const SizedBox(height: 20),
 
                 TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: "Email",
@@ -82,12 +191,24 @@ class RegisterScreen extends StatelessWidget {
                 const SizedBox(height: 20),
 
                 TextField(
-                  obscureText: true,
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: "Password",
                     hintStyle: const TextStyle(color: Colors.grey),
                     prefixIcon: const Icon(Icons.lock, color: Colors.grey),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
                     filled: true,
                     fillColor: const Color(0xFF1A1A1F),
                     border: OutlineInputBorder(
@@ -100,13 +221,25 @@ class RegisterScreen extends StatelessWidget {
                 const SizedBox(height: 20),
 
                 TextField(
-                  obscureText: true,
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPassword,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: "Confirm Password",
                     hintStyle: const TextStyle(color: Colors.grey),
                     prefixIcon:
                         const Icon(Icons.lock_outline, color: Colors.grey),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.grey,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
+                      },
+                    ),
                     filled: true,
                     fillColor: const Color(0xFF1A1A1F),
                     border: OutlineInputBorder(
@@ -128,23 +261,27 @@ class RegisterScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(15),
                       ),
                     ),
-                    onPressed: () {},
-                    child: const Text(
-                      "Create Account",
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                      ),
-                    ),
+                    onPressed: _isLoading ? null : _register,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            "Create Account",
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                        },
                   child: const Text(
                     "Already have an account? Login",
                     style: TextStyle(
