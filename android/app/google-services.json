@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "812151452516",
+    "project_id": "spendsense-b8559",
+    "storage_bucket": "spendsense-b8559.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:812151452516:android:c87952e773390e1c118071",
+        "android_client_info": {
+          "package_name": "com.tracker.expense_tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXInOXd6E6B5uj9XT2LCurBxelH-vu3TQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

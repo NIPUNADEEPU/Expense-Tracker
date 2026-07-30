@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'providers/expense_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/splash_screen.dart';
 
-void main() {
+void main() async {
   // Ensure status bar styling is transparent & matches theme
   WidgetsFlutterBinding.ensureInitialized();
+  
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
     statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: Color(0xFF0F0F12),
+    systemNavigationBarColor: const Color(0xFF0F0F12),
     systemNavigationBarIconBrightness: Brightness.light,
   ));
   
