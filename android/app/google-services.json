@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "812151452516",
+    "firebase_url": "https://spendsense-b8559-default-rtdb.firebaseio.com",
     "project_id": "spendsense-b8559",
     "storage_bucket": "spendsense-b8559.firebasestorage.app"
   },
