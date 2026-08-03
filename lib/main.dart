@@ -3,25 +3,24 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/expense_provider.dart';
-import 'screens/dashboard_screen.dart';
 import 'screens/splash_screen.dart';
 
 void main() async {
   // Ensure status bar styling is transparent & matches theme
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: Color(0xFF0F0F12),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
   );
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: const Color(0xFF0F0F12),
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
-  
   runApp(const MyApp());
 }
 
@@ -40,10 +39,14 @@ class MyApp extends StatelessWidget {
         darkTheme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF0F0F12), // Premium deep pitch charcoal
-          cardColor: const Color(0xFF191920), // Slightly lighter charcoal for cards
+          scaffoldBackgroundColor: const Color(
+            0xFF0F0F12,
+          ), // Premium deep pitch charcoal
+          cardColor: const Color(
+            0xFF191920,
+          ), // Slightly lighter charcoal for cards
           dividerColor: const Color(0xFF2E2E38),
-          
+
           colorScheme: const ColorScheme.dark(
             primary: Color(0xFF8B5CF6), // Indigo / Violet primary
             onPrimary: Colors.white,
@@ -54,7 +57,7 @@ class MyApp extends StatelessWidget {
             error: Color(0xFFEF4444), // Rose red for expense/errors
             onError: Colors.white,
           ),
-          
+
           appBarTheme: const AppBarTheme(
             backgroundColor: Color(0xFF0F0F12),
             elevation: 0,
@@ -66,16 +69,20 @@ class MyApp extends StatelessWidget {
             ),
             iconTheme: IconThemeData(color: Color(0xFFF3F4F6)),
           ),
-          
+
           segmentedButtonTheme: SegmentedButtonThemeData(
             style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              backgroundColor: WidgetStateProperty.resolveWith<Color?>((
+                states,
+              ) {
                 if (states.contains(WidgetState.selected)) {
                   return const Color(0xFF8B5CF6);
                 }
                 return const Color(0xFF191920);
               }),
-              foregroundColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              foregroundColor: WidgetStateProperty.resolveWith<Color?>((
+                states,
+              ) {
                 if (states.contains(WidgetState.selected)) {
                   return Colors.white;
                 }
@@ -87,14 +94,22 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          
+
           chipTheme: ChipThemeData(
             backgroundColor: const Color(0xFF191920),
             disabledColor: Colors.grey,
             selectedColor: const Color(0xFF8B5CF6),
             secondarySelectedColor: const Color(0xFF8B5CF6),
-            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70),
-            secondaryLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+            labelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white70,
+            ),
+            secondaryLabelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
             brightness: Brightness.dark,
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             shape: RoundedRectangleBorder(
@@ -102,15 +117,29 @@ class MyApp extends StatelessWidget {
               side: const BorderSide(color: Colors.transparent),
             ),
           ),
-          
+
           textTheme: const TextTheme(
-            titleLarge: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.bold, color: Color(0xFFF3F4F6)),
-            titleMedium: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w600, color: Color(0xFFF3F4F6)),
-            bodyLarge: TextStyle(fontFamily: 'Roboto', color: Color(0xFFE5E7EB)),
-            bodyMedium: TextStyle(fontFamily: 'Roboto', color: Color(0xFF9CA3AF)),
+            titleLarge: TextStyle(
+              fontFamily: 'Roboto',
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFF3F4F6),
+            ),
+            titleMedium: TextStyle(
+              fontFamily: 'Roboto',
+              fontWeight: FontWeight.w600,
+              color: Color(0xFFF3F4F6),
+            ),
+            bodyLarge: TextStyle(
+              fontFamily: 'Roboto',
+              color: Color(0xFFE5E7EB),
+            ),
+            bodyMedium: TextStyle(
+              fontFamily: 'Roboto',
+              color: Color(0xFF9CA3AF),
+            ),
           ),
         ),
-       home: const SplashScreen(),
+        home: const SplashScreen(),
       ),
     );
   }
