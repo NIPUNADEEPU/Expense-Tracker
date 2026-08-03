@@ -5,11 +5,13 @@ import '../models/transaction.dart';
 class TransactionTile extends StatelessWidget {
   final Transaction transaction;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   const TransactionTile({
     super.key,
     required this.transaction,
     required this.onDelete,
+    required this.onEdit,
   });
 
   @override
@@ -91,7 +93,7 @@ class TransactionTile extends StatelessWidget {
               ),
             ),
             
-            // Amount and Date
+            // Amount, date, and edit action
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -112,6 +114,12 @@ class TransactionTile extends StatelessWidget {
                     fontSize: 11,
                     color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.4),
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded, size: 19),
+                  tooltip: 'Edit transaction',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onEdit,
                 ),
               ],
             ),
