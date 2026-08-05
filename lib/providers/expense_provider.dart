@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import '../models/transaction.dart';
 import '../models/category.dart';
+import '../services/notification_service.dart';
 
 class ExpenseProvider with ChangeNotifier {
   final List<Transaction> _transactions = [];
@@ -23,6 +24,7 @@ class ExpenseProvider with ChangeNotifier {
       if (user != null) {
         _currentUserId = user.uid;
         _subscribeToTransactions(user.uid);
+        unawaited(NotificationService.registerCurrentUserDevice());
       } else {
         _currentUserId = null;
         _unsubscribeFromTransactions();
@@ -142,6 +144,13 @@ class ExpenseProvider with ChangeNotifier {
     if (uid == null) return;
 
     unawaited(_deleteTransaction(uid, id));
+  }
+
+  void updateTransaction(Transaction transaction) {
+    final uid = _currentUserId;
+    if (uid == null) return;
+
+    unawaited(_writeTransaction(uid, transaction.id, transaction));
   }
 
   Future<void> _writeTransaction(

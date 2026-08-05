@@ -4,12 +4,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/expense_provider.dart';
 import 'screens/splash_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   // Ensure status bar styling is transparent & matches theme
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await NotificationService.initialize();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -33,6 +35,7 @@ class MyApp extends StatelessWidget {
     return ExpenseScope(
       notifier: ExpenseProvider(),
       child: MaterialApp(
+        scaffoldMessengerKey: NotificationService.scaffoldMessengerKey,
         title: 'Expense Tracker',
         debugShowCheckedModeBanner: false,
         themeMode: ThemeMode.dark, // Default to premium dark mode
