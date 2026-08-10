@@ -5,7 +5,9 @@ import '../models/transaction.dart';
 import '../providers/expense_provider.dart';
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  final Transaction? transaction;
+
+  const AddTransactionScreen({super.key, this.transaction});
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -19,6 +21,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   TransactionType _selectedType = TransactionType.expense;
   ExpenseCategory _selectedCategory = ExpenseCategory.food;
   DateTime _selectedDate = DateTime.now();
+
+  bool get _isEditing => widget.transaction != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final transaction = widget.transaction;
+    if (transaction != null) {
+      _titleController.text = transaction.title;
+      _amountController.text = transaction.amount.toString();
+      _selectedType = transaction.type;
+      _selectedCategory = transaction.category;
+      _selectedDate = transaction.date;
+    }
+  }
 
   @override
   void dispose() {
@@ -51,13 +68,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     // Use context to get provider from scope
     final provider = ExpenseScope.of(context);
-    provider.addTransaction(
-      title: enteredTitle,
-      amount: enteredAmount,
-      type: _selectedType,
-      category: _selectedCategory,
-      date: _selectedDate,
-    );
+    final existingTransaction = widget.transaction;
+    if (existingTransaction == null) {
+      provider.addTransaction(
+        title: enteredTitle,
+        amount: enteredAmount,
+        type: _selectedType,
+        category: _selectedCategory,
+        date: _selectedDate,
+      );
+    } else {
+      provider.updateTransaction(Transaction(
+        id: existingTransaction.id,
+        title: enteredTitle,
+        amount: enteredAmount,
+        type: _selectedType,
+        category: _selectedCategory,
+        date: _selectedDate,
+      ));
+    }
 
     Navigator.of(context).pop();
   }
@@ -108,7 +137,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               const SizedBox(height: 18),
               
               Text(
-                'New Transaction',
+                _isEditing ? 'Edit Transaction' : 'New Transaction',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -318,8 +347,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         foregroundColor: theme.colorScheme.onPrimary,
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Save',
+                      child: Text(
+                        _isEditing ? 'Update' : 'Save',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
