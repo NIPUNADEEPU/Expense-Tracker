@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dashboard_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -34,7 +34,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+    if (name.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Please fill in all fields"),
@@ -59,16 +62,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       await credential.user?.updateDisplayName(name);
 
       final uid = credential.user?.uid;
       if (uid != null) {
-        await FirebaseDatabase.instance.ref('users/$uid/profile').set({
+        final profileReference = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid);
+        await profileReference.set({
           'name': name,
           'email': email,
           'createdAt': DateTime.now().toIso8601String(),
@@ -79,9 +83,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (context) => const DashboardScreen(),
-        ),
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
@@ -92,11 +94,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("An error occurred: $e"),
+          content: Text("An error occurred: $error"),
           backgroundColor: const Color(0xFFEF4444),
         ),
       );
@@ -122,11 +124,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const CircleAvatar(
                   radius: 45,
                   backgroundColor: Color(0xFF8B5CF6),
-                  child: Icon(
-                    Icons.person_add,
-                    color: Colors.white,
-                    size: 45,
-                  ),
+                  child: Icon(Icons.person_add, color: Colors.white, size: 45),
                 ),
 
                 const SizedBox(height: 25),
@@ -145,10 +143,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Text(
                   "Create your SpendSense account",
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
                 ),
 
                 const SizedBox(height: 40),
@@ -200,7 +195,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: const Icon(Icons.lock, color: Colors.grey),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: Colors.grey,
                       ),
                       onPressed: () {
@@ -227,11 +224,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   decoration: InputDecoration(
                     hintText: "Confirm Password",
                     hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon:
-                        const Icon(Icons.lock_outline, color: Colors.grey),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: Colors.grey,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                        _obscureConfirmPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: Colors.grey,
                       ),
                       onPressed: () {
@@ -266,10 +267,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
                             "Create Account",
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.white,
-                            ),
+                            style: TextStyle(fontSize: 18, color: Colors.white),
                           ),
                   ),
                 ),
@@ -284,10 +282,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                   child: const Text(
                     "Already have an account? Login",
-                    style: TextStyle(
-                      color: Color(0xFF8B5CF6),
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Color(0xFF8B5CF6), fontSize: 16),
                   ),
                 ),
               ],

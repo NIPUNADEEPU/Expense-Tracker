@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
 import '../providers/expense_provider.dart';
 import '../widgets/transaction_tile.dart';
+import 'add_transaction_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -15,6 +17,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _searchQuery = '';
   TransactionType? _selectedTypeFilter;
   ExpenseCategory? _selectedCategoryFilter;
+  DateTimeRange? _selectedDateRange;
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedDateRange,
+      firstDate: DateTime(now.year - 5),
+      lastDate: now,
+    );
+    if (range != null) setState(() => _selectedDateRange = range);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +40,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final matchesSearch = t.title.toLowerCase().contains(_searchQuery.toLowerCase());
       final matchesType = _selectedTypeFilter == null || t.type == _selectedTypeFilter;
       final matchesCategory = _selectedCategoryFilter == null || t.category == _selectedCategoryFilter;
-      return matchesSearch && matchesType && matchesCategory;
+      final matchesDate = _selectedDateRange == null ||
+          (!t.date.isBefore(_selectedDateRange!.start) &&
+              !t.date.isAfter(DateTime(
+                _selectedDateRange!.end.year,
+                _selectedDateRange!.end.month,
+                _selectedDateRange!.end.day,
+                23,
+                59,
+                59,
+              )));
+      return matchesSearch && matchesType && matchesCategory && matchesDate;
     }).toList();
+    final reportIncome = filteredTransactions
+        .where((transaction) => transaction.type == TransactionType.income)
+        .fold(0.0, (sum, transaction) => sum + transaction.amount);
+    final reportExpenses = filteredTransactions
+        .where((transaction) => transaction.type == TransactionType.expense)
+        .fold(0.0, (sum, transaction) => sum + transaction.amount);
 
     return Scaffold(
       appBar: AppBar(
@@ -130,6 +160,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
           const SizedBox(height: 8),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDateRange,
+                    icon: const Icon(Icons.date_range_rounded),
+                    label: Text(
+                      _selectedDateRange == null
+                          ? 'All dates'
+                          : '${DateFormat('MMM d').format(_selectedDateRange!.start)} - ${DateFormat('MMM d, y').format(_selectedDateRange!.end)}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                if (_selectedDateRange != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => setState(() => _selectedDateRange = null),
+                    tooltip: 'Clear date filter',
+                    icon: const Icon(Icons.clear_rounded),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           
           // 3. Category Filter
           SingleChildScrollView(
@@ -170,6 +229,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
           const Divider(height: 24, thickness: 1),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Expanded(child: _ReportValue(label: 'Income', amount: reportIncome, color: const Color(0xFF10B981))),
+                    Expanded(child: _ReportValue(label: 'Expenses', amount: reportExpenses, color: theme.colorScheme.error)),
+                    Expanded(child: _ReportValue(label: 'Net', amount: reportIncome - reportExpenses, color: theme.colorScheme.primary)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           
           // 4. Transactions List
           Expanded(
@@ -202,6 +278,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       final transaction = filteredTransactions[index];
                       return TransactionTile(
                         transaction: transaction,
+                        onEdit: () => _showEditTransactionSheet(context, transaction),
                         onDelete: () {
                           provider.deleteTransaction(transaction.id);
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -222,4 +299,34 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
   }
+
+  void _showEditTransactionSheet(BuildContext context, Transaction transaction) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddTransactionScreen(transaction: transaction),
+    );
+  }
+}
+
+class _ReportValue extends StatelessWidget {
+  final String label;
+  final double amount;
+  final Color color;
+
+  const _ReportValue({required this.label, required this.amount, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            '\$${amount.toStringAsFixed(2)}',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+        ],
+      );
 }

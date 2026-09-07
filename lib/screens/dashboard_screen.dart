@@ -1,15 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/transaction.dart';
 import '../providers/expense_provider.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/expense_chart.dart';
+import '../widgets/income_expense_chart.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
 import 'history_screen.dart';
-import 'login_screen.dart';
+import 'profile_screen.dart';
+import 'monthly_trends_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  int _selectedIndex = 0;
+
+  final _pages = const [
+    HomeDashboard(),
+    HistoryScreen(),
+    MonthlyTrendsScreen(),
+    ProfileScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: IndexedStack(index: _selectedIndex, children: _pages),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        backgroundColor: theme.cardColor,
+        indicatorColor: theme.colorScheme.primary.withValues(alpha: 0.25),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.history_outlined), selectedIcon: Icon(Icons.history_rounded), label: 'History'),
+          NavigationDestination(icon: Icon(Icons.show_chart_outlined), selectedIcon: Icon(Icons.show_chart_rounded), label: 'Trends'),
+          NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
+
+class HomeDashboard extends StatelessWidget {
+  const HomeDashboard({super.key});
 
   void _showAddTransactionSheet(BuildContext context) {
     showModalBottomSheet(
@@ -42,42 +83,6 @@ class DashboardScreen extends StatelessWidget {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'History',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HistoryScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: () async {
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              try {
-                await FirebaseAuth.instance.signOut();
-                if (!context.mounted) return;
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  (route) => false,
-                );
-              } catch (e) {
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(
-                    content: Text('Failed to sign out: $e'),
-                    backgroundColor: theme.colorScheme.error,
-                  ),
-                );
-              }
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -115,6 +120,30 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
+
+              Text(
+                'Income vs Expenses',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 20, 20, 12),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: theme.dividerColor.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: IncomeExpenseChart(
+                  income: provider.totalIncome,
+                  expenses: provider.totalExpenses,
+                ),
+              ),
+              const SizedBox(height: 24),
               
               // 3. Category Breakdown (Pie Chart)
               Text(
@@ -141,26 +170,12 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               
-              // 4. Recent Transactions Title & See All
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Recent Transactions',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const HistoryScreen()),
-                      );
-                    },
-                    child: const Text('See All'),
-                  ),
-                ],
+              // 4. Recent Transactions Title
+              Text(
+                'Recent Transactions',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               
@@ -186,6 +201,7 @@ class DashboardScreen extends StatelessWidget {
                     final transaction = provider.recentTransactions[index];
                     return TransactionTile(
                       transaction: transaction,
+                      onEdit: () => _showEditTransactionSheet(context, transaction),
                       onDelete: () {
                         provider.deleteTransaction(transaction.id);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -215,6 +231,15 @@ class DashboardScreen extends StatelessWidget {
         icon: const Icon(Icons.add_rounded),
         elevation: 4,
       ),
+    );
+  }
+
+  void _showEditTransactionSheet(BuildContext context, Transaction transaction) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddTransactionScreen(transaction: transaction),
     );
   }
 }
