@@ -24,6 +24,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Use the camera to scan receipt details into a transaction.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a receipt photo to scan its transaction details.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
