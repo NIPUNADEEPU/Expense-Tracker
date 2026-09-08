@@ -59,17 +59,15 @@ class DefaultFirebaseOptions {
     databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyB2fzV9uAwHNCh3w9bGDdcO7dKghwvuKRA',
-    appId: '1:812151452516:ios:35d413196d1b9830118071',
+    appId: '1:812151452516:ios:fe99a5080863c951118071',
     messagingSenderId: '812151452516',
     projectId: 'spendsense-b8559',
     databaseURL: 'https://spendsense-b8559-default-rtdb.firebaseio.com',
     storageBucket: 'spendsense-b8559.firebasestorage.app',
-    iosBundleId: 'com.tracker.expenseTracker',
+    iosBundleId: 'com.pournami.expenseTracker16',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyB2fzV9uAwHNCh3w9bGDdcO7dKghwvuKRA',
     appId: '1:812151452516:ios:35d413196d1b9830118071',

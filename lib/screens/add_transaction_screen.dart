@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
 import '../providers/expense_provider.dart';
+import '../services/receipt_ocr_service.dart';
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  final Transaction? transaction;
+
+  const AddTransactionScreen({super.key, this.transaction});
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -15,16 +19,100 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _amountController = TextEditingController();
-  
+  final _imagePicker = ImagePicker();
+  late final ReceiptOcrService _receiptOcrService;
+
   TransactionType _selectedType = TransactionType.expense;
   ExpenseCategory _selectedCategory = ExpenseCategory.food;
   DateTime _selectedDate = DateTime.now();
+  bool _isScanningReceipt = false;
+
+  bool get _isEditing => widget.transaction != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _receiptOcrService = ReceiptOcrService();
+    final transaction = widget.transaction;
+    if (transaction != null) {
+      _titleController.text = transaction.title;
+      _amountController.text = transaction.amount.toString();
+      _selectedType = transaction.type;
+      _selectedCategory = transaction.category;
+      _selectedDate = transaction.date;
+    }
+  }
 
   @override
   void dispose() {
+    _receiptOcrService.dispose();
     _titleController.dispose();
     _amountController.dispose();
     super.dispose();
+  }
+
+  Future<void> _scanReceipt() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    try {
+      final image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 90,
+      );
+      if (image == null) return;
+
+      setState(() => _isScanningReceipt = true);
+      final result = await _receiptOcrService.scanImage(image.path);
+      if (!mounted) return;
+
+      setState(() {
+        if (result.amount != null) {
+          _amountController.text = result.amount!.toStringAsFixed(2);
+        }
+        if (result.merchant != null && _titleController.text.trim().isEmpty) {
+          _titleController.text = result.merchant!;
+        }
+      });
+
+      final message = result.amount == null
+          ? 'Text was found, but no receipt total could be detected. Please enter it manually.'
+          : 'Receipt scanned. Please review the details before saving.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not scan this receipt. Try a clearer image.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isScanningReceipt = false);
+    }
   }
 
   void _presentDatePicker() async {
@@ -51,13 +139,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     // Use context to get provider from scope
     final provider = ExpenseScope.of(context);
-    provider.addTransaction(
-      title: enteredTitle,
-      amount: enteredAmount,
-      type: _selectedType,
-      category: _selectedCategory,
-      date: _selectedDate,
-    );
+    final existingTransaction = widget.transaction;
+    if (existingTransaction == null) {
+      provider.addTransaction(
+        title: enteredTitle,
+        amount: enteredAmount,
+        type: _selectedType,
+        category: _selectedCategory,
+        date: _selectedDate,
+      );
+    } else {
+      provider.updateTransaction(
+        Transaction(
+          id: existingTransaction.id,
+          title: enteredTitle,
+          amount: enteredAmount,
+          type: _selectedType,
+          category: _selectedCategory,
+          date: _selectedDate,
+        ),
+      );
+    }
 
     Navigator.of(context).pop();
   }
@@ -65,7 +167,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: EdgeInsets.only(
         top: 24,
@@ -100,22 +202,24 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   width: 48,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.15),
+                    color: theme.textTheme.bodyMedium?.color?.withValues(
+                      alpha: 0.15,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
               const SizedBox(height: 18),
-              
+
               Text(
-                'New Transaction',
+                _isEditing ? 'Edit Transaction' : 'New Transaction',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
-              
+
               // 1. Transaction Type Toggle (Segmented Control)
               SegmentedButton<TransactionType>(
                 segments: const [
@@ -145,25 +249,68 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 },
               ),
               const SizedBox(height: 20),
-              
-              // 2. Amount Input Field
+
+              // 2. Receipt OCR
+              OutlinedButton.icon(
+                onPressed: _isScanningReceipt ? null : _scanReceipt,
+                icon: _isScanningReceipt
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.document_scanner_outlined),
+                label: Text(
+                  _isScanningReceipt
+                      ? 'Scanning receipt…'
+                      : 'Scan receipt with OCR',
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Scan a receipt to fill in the amount and merchant. Review before saving.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.textTheme.bodyMedium?.color?.withValues(
+                    alpha: 0.65,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 3. Amount Input Field
               TextFormField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 textInputAction: TextInputAction.next,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Amount',
                   prefixText: '\$ ',
                   prefixStyle: TextStyle(
-                    color: theme.textTheme.bodyLarge?.color?.withValues(alpha: 0.5),
+                    color: theme.textTheme.bodyLarge?.color?.withValues(
+                      alpha: 0.5,
+                    ),
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -180,8 +327,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              
-              // 3. Title Input Field
+
+              // 4. Title Input Field
               TextFormField(
                 controller: _titleController,
                 textCapitalization: TextCapitalization.sentences,
@@ -192,7 +339,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -205,55 +355,64 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 },
               ),
               const SizedBox(height: 20),
-              
+
               // 4. Category Selector (Chips wrap)
               Text(
                 'Category',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
+                  color: theme.textTheme.bodyMedium?.color?.withValues(
+                    alpha: 0.8,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: ExpenseCategory.values.where((category) {
-                  // Filter out salary for expenses, or only show salary (and 'other') for income
-                  if (_selectedType == TransactionType.income) {
-                    return category == ExpenseCategory.salary || category == ExpenseCategory.other;
-                  } else {
-                    return category != ExpenseCategory.salary;
-                  }
-                }).map((category) {
-                  final isSelected = _selectedCategory == category;
-                  return ChoiceChip(
-                    avatar: Icon(
-                      category.icon,
-                      color: isSelected ? Colors.white : category.color,
-                      size: 16,
-                    ),
-                    label: Text(category.displayName),
-                    selected: isSelected,
-                    selectedColor: category.color,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          _selectedCategory = category;
-                        });
+                children: ExpenseCategory.values
+                    .where((category) {
+                      // Filter out salary for expenses, or only show salary (and 'other') for income
+                      if (_selectedType == TransactionType.income) {
+                        return category == ExpenseCategory.salary ||
+                            category == ExpenseCategory.other;
+                      } else {
+                        return category != ExpenseCategory.salary;
                       }
-                    },
-                  );
-                }).toList(),
+                    })
+                    .map((category) {
+                      final isSelected = _selectedCategory == category;
+                      return ChoiceChip(
+                        avatar: Icon(
+                          category.icon,
+                          color: isSelected ? Colors.white : category.color,
+                          size: 16,
+                        ),
+                        label: Text(category.displayName),
+                        selected: isSelected,
+                        selectedColor: category.color,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _selectedCategory = category;
+                            });
+                          }
+                        },
+                      );
+                    })
+                    .toList(),
               ),
               const SizedBox(height: 20),
-              
+
               // 5. Date Selector
               InkWell(
                 onTap: _presentDatePicker,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
@@ -289,7 +448,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              
+
               // 6. Action Buttons
               Row(
                 children: [
@@ -318,8 +477,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         foregroundColor: theme.colorScheme.onPrimary,
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Save',
+                      child: Text(
+                        _isEditing ? 'Update' : 'Save',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),

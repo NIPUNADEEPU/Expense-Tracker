@@ -2,15 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart' hide Transaction;
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import '../models/transaction.dart';
 import '../models/category.dart';
+import '../services/notification_service.dart';
 
 class ExpenseProvider with ChangeNotifier {
   final List<Transaction> _transactions = [];
   final _uuid = const Uuid();
   StreamSubscription? _authSubscription;
-  StreamSubscription? _databaseSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _firestoreSubscription;
   String? _currentUserId;
 
   ExpenseProvider() {
@@ -21,49 +23,58 @@ class ExpenseProvider with ChangeNotifier {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         _currentUserId = user.uid;
-        _subscribeToDatabase(user.uid);
+        _subscribeToTransactions(user.uid);
+        unawaited(NotificationService.registerCurrentUserDevice());
       } else {
         _currentUserId = null;
-        _unsubscribeFromDatabase();
+        _unsubscribeFromTransactions();
         _transactions.clear();
         notifyListeners();
       }
     });
   }
 
-  void _subscribeToDatabase(String uid) {
-    _databaseSubscription?.cancel();
-    final ref = FirebaseDatabase.instance.ref('users/$uid/transactions');
-    _databaseSubscription = ref.onValue.listen((event) {
-      _transactions.clear();
-      final data = event.snapshot.value;
-      if (data is Map) {
-        data.forEach((key, value) {
-          try {
-            if (value is Map) {
-              final Map<String, dynamic> txMap = Map<String, dynamic>.from(value);
-              _transactions.add(Transaction.fromJson(txMap));
+  void _subscribeToTransactions(String uid) {
+    _firestoreSubscription?.cancel();
+    _firestoreSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('transactions')
+        .snapshots()
+        .listen(
+          (snapshot) {
+            final transactions = <Transaction>[];
+
+            for (final document in snapshot.docs) {
+              try {
+                final data = Map<String, dynamic>.from(document.data());
+                data.putIfAbsent('id', () => document.id);
+                transactions.add(Transaction.fromJson(data));
+              } catch (error) {
+                debugPrint('Error parsing transaction ${document.id}: $error');
+              }
             }
-          } catch (e) {
-            debugPrint("Error parsing transaction: $e");
-          }
-        });
-      }
-      notifyListeners();
-    }, onError: (error) {
-      debugPrint("Database listen error: $error");
-    });
+
+            _transactions
+              ..clear()
+              ..addAll(transactions);
+            notifyListeners();
+          },
+          onError: (error) {
+            debugPrint('Firestore listen error: $error');
+          },
+        );
   }
 
-  void _unsubscribeFromDatabase() {
-    _databaseSubscription?.cancel();
-    _databaseSubscription = null;
+  void _unsubscribeFromTransactions() {
+    _firestoreSubscription?.cancel();
+    _firestoreSubscription = null;
   }
 
   @override
   void dispose() {
     _authSubscription?.cancel();
-    _databaseSubscription?.cancel();
+    _firestoreSubscription?.cancel();
     super.dispose();
   }
 
@@ -81,13 +92,13 @@ class ExpenseProvider with ChangeNotifier {
   double get totalIncome {
     return _transactions
         .where((t) => t.type == TransactionType.income)
-        .fold(0.0, (sum, t) => sum + t.amount);
+        .fold(0.0, (total, t) => total + t.amount);
   }
 
   double get totalExpenses {
     return _transactions
         .where((t) => t.type == TransactionType.expense)
-        .fold(0.0, (sum, t) => sum + t.amount);
+        .fold(0.0, (total, t) => total + t.amount);
   }
 
   double get totalBalance {
@@ -98,7 +109,8 @@ class ExpenseProvider with ChangeNotifier {
     final Map<ExpenseCategory, double> totals = {};
     for (var transaction in _transactions) {
       if (transaction.type == TransactionType.expense) {
-        totals[transaction.category] = (totals[transaction.category] ?? 0.0) + transaction.amount;
+        totals[transaction.category] =
+            (totals[transaction.category] ?? 0.0) + transaction.amount;
       }
     }
     return totals;
@@ -124,24 +136,43 @@ class ExpenseProvider with ChangeNotifier {
       date: date,
     );
 
-    FirebaseDatabase.instance
-        .ref('users/$uid/transactions/$id')
-        .set(newTransaction.toJson())
-        .catchError((error) {
-      debugPrint("Failed to add transaction: $error");
-    });
+    unawaited(_writeTransaction(uid, id, newTransaction));
   }
 
   void deleteTransaction(String id) {
     final uid = _currentUserId;
     if (uid == null) return;
 
-    FirebaseDatabase.instance
-        .ref('users/$uid/transactions/$id')
-        .remove()
-        .catchError((error) {
-      debugPrint("Failed to delete transaction: $error");
-    });
+    unawaited(_deleteTransaction(uid, id));
+  }
+
+  void updateTransaction(Transaction transaction) {
+    final uid = _currentUserId;
+    if (uid == null) return;
+
+    unawaited(_writeTransaction(uid, transaction.id, transaction));
+  }
+
+  Future<void> _writeTransaction(
+    String uid,
+    String id,
+    Transaction transaction,
+  ) async {
+    final transactionReference = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('transactions')
+        .doc(id);
+    await transactionReference.set(transaction.toJson());
+  }
+
+  Future<void> _deleteTransaction(String uid, String id) async {
+    final transactionReference = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('transactions')
+        .doc(id);
+    await transactionReference.delete();
   }
 }
 
