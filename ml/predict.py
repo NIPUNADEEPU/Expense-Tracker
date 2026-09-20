@@ -37,8 +37,17 @@ prediction = model.predict(description_tfidf)[0]
 
 
 # ---------------------------------------------------------
+# Calculate prediction confidence
+# ---------------------------------------------------------
+
+probabilities = model.predict_proba(description_tfidf)[0]
+confidence = max(probabilities)
+
+
+# ---------------------------------------------------------
 # Display result
 # ---------------------------------------------------------
 
 print(f"Description: {description}")
 print(f"Predicted category: {prediction}")
+print(f"Confidence: {confidence:.2f}")
