@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -24,7 +25,9 @@ class ExpenseProvider with ChangeNotifier {
       if (user != null) {
         _currentUserId = user.uid;
         _subscribeToTransactions(user.uid);
-        unawaited(NotificationService.registerCurrentUserDevice());
+        if (!kIsWeb) {
+          unawaited(NotificationService.registerCurrentUserDevice());
+        }
       } else {
         _currentUserId = null;
         _unsubscribeFromTransactions();
@@ -137,6 +140,35 @@ class ExpenseProvider with ChangeNotifier {
     );
 
     unawaited(_writeTransaction(uid, id, newTransaction));
+  }
+
+  Future<void> addTransactions({
+    required List<({String title, double amount, ExpenseCategory category})>
+    items,
+    required DateTime date,
+  }) async {
+    final uid = _currentUserId;
+    if (uid == null || items.isEmpty) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    for (final item in items) {
+      final id = _uuid.v4();
+      final transaction = Transaction(
+        id: id,
+        title: item.title,
+        amount: item.amount,
+        type: TransactionType.expense,
+        category: item.category,
+        date: date,
+      );
+      final reference = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('transactions')
+          .doc(id);
+      batch.set(reference, transaction.toJson());
+    }
+    await batch.commit();
   }
 
   void deleteTransaction(String id) {

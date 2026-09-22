@@ -21,6 +21,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _amountController = TextEditingController();
   final _imagePicker = ImagePicker();
   late final ReceiptOcrService _receiptOcrService;
+  List<ReceiptLineItem> _receiptItems = [];
 
   TransactionType _selectedType = TransactionType.expense;
   ExpenseCategory _selectedCategory = ExpenseCategory.food;
@@ -88,7 +89,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       if (!mounted) return;
 
       setState(() {
-        if (result.amount != null) {
+        _receiptItems = result.items;
+        // A total is useful only when the receipt did not yield separate items.
+        if (result.items.isEmpty && result.amount != null) {
           _amountController.text = result.amount!.toStringAsFixed(2);
         }
         if (result.merchant != null && _titleController.text.trim().isEmpty) {
@@ -96,9 +99,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         }
       });
 
-      final message = result.amount == null
+      final message = result.items.isNotEmpty
+          ? '${result.items.length} receipt items found. Review their categories before saving.'
+          : result.amount == null
           ? 'Text was found, but no receipt total could be detected. Please enter it manually.'
-          : 'Receipt scanned. Please review the details before saving.';
+          : 'Receipt total found. Please review the details before saving.';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -129,7 +134,34 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     }
   }
 
-  void _submitData() {
+  Future<void> _submitData() async {
+    final provider = ExpenseScope.of(context);
+    if (!_isEditing && _receiptItems.isNotEmpty) {
+      try {
+        await provider.addTransactions(
+          items: _receiptItems
+              .map(
+                (item) => (
+                  title: item.title,
+                  amount: item.amount,
+                  category: item.category,
+                ),
+              )
+              .toList(),
+          date: _selectedDate,
+        );
+        if (mounted) Navigator.of(context).pop();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not save receipt items. Try again.'),
+            ),
+          );
+        }
+      }
+      return;
+    }
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -138,7 +170,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final enteredAmount = double.tryParse(_amountController.text.trim()) ?? 0.0;
 
     // Use context to get provider from scope
-    final provider = ExpenseScope.of(context);
     final existingTransaction = widget.transaction;
     if (existingTransaction == null) {
       provider.addTransaction(
@@ -274,7 +305,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Scan a receipt to fill in the amount and merchant. Review before saving.',
+                'Scan a receipt to add each detected item as a separate expense.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.textTheme.bodyMedium?.color?.withValues(
                     alpha: 0.65,
@@ -282,6 +313,96 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              if (_receiptItems.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Receipt items (${_receiptItems.length})',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Check the category for each item. Remove anything that is not a purchase.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 10),
+                      ..._receiptItems.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text('\$${item.amount.toStringAsFixed(2)}'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              DropdownButton<ExpenseCategory>(
+                                value: item.category,
+                                underline: const SizedBox.shrink(),
+                                onChanged: (category) {
+                                  if (category == null) return;
+                                  setState(() {
+                                    _receiptItems[index] = item.copyWith(
+                                      category: category,
+                                    );
+                                  });
+                                },
+                                items: ExpenseCategory.values
+                                    .where(
+                                      (category) =>
+                                          category != ExpenseCategory.salary,
+                                    )
+                                    .map(
+                                      (category) => DropdownMenuItem(
+                                        value: category,
+                                        child: Text(category.displayName),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                              IconButton(
+                                tooltip: 'Remove item',
+                                onPressed: () {
+                                  setState(() => _receiptItems.removeAt(index));
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
 
               // 3. Amount Input Field
               TextFormField(
@@ -478,8 +599,12 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                         elevation: 0,
                       ),
                       child: Text(
-                        _isEditing ? 'Update' : 'Save',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        _isEditing
+                            ? 'Update'
+                            : _receiptItems.isNotEmpty
+                            ? 'Save ${_receiptItems.length} items'
+                            : 'Save',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
