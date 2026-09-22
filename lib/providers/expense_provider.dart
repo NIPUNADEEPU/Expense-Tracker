@@ -148,7 +148,17 @@ class ExpenseProvider with ChangeNotifier {
     required DateTime date,
   }) async {
     final uid = _currentUserId;
-    if (uid == null || items.isEmpty) return;
+    if (uid == null) {
+      throw StateError('You must be signed in to save receipt items.');
+    }
+    if (items.isEmpty) {
+      throw ArgumentError('At least one receipt item is required.');
+    }
+    if (items.any(
+      (item) => item.title.trim().isEmpty || !item.amount.isFinite,
+    )) {
+      throw ArgumentError('Receipt items must have a title and valid amount.');
+    }
 
     final batch = FirebaseFirestore.instance.batch();
     for (final item in items) {

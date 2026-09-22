@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
 import '../providers/expense_provider.dart';
@@ -145,11 +146,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           date: _selectedDate,
         );
         if (mounted) Navigator.of(context).pop();
-      } catch (_) {
+      } catch (error, stackTrace) {
+        debugPrint('Could not save receipt items: $error');
+        debugPrintStack(stackTrace: stackTrace);
         if (mounted) {
+          final message = error is FirebaseException &&
+                  error.code == 'permission-denied'
+              ? 'Saving is not allowed for this account. Please sign in again.'
+              : error is StateError
+              ? error.message
+              : 'Could not save receipt items. Try again.';
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not save receipt items. Try again.'),
+            SnackBar(
+              content: Text(message),
             ),
           );
         }
