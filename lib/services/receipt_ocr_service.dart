@@ -1,11 +1,40 @@
+import '../models/category.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+
+/// A purchasable line detected on a receipt. The category is a best-effort
+/// suggestion and is always editable before it is saved.
+class ReceiptLineItem {
+  const ReceiptLineItem({
+    required this.title,
+    required this.amount,
+    required this.category,
+  });
+
+  final String title;
+  final double amount;
+  final ExpenseCategory category;
+
+  ReceiptLineItem copyWith({ExpenseCategory? category}) {
+    return ReceiptLineItem(
+      title: title,
+      amount: amount,
+      category: category ?? this.category,
+    );
+  }
+}
 
 /// Receipt details inferred from text recognized by Google ML Kit.
 class ReceiptScanResult {
-  const ReceiptScanResult({this.amount, this.merchant, this.rawText = ''});
+  const ReceiptScanResult({
+    this.amount,
+    this.merchant,
+    this.items = const [],
+    this.rawText = '',
+  });
 
   final double? amount;
   final String? merchant;
+  final List<ReceiptLineItem> items;
   final String rawText;
 }
 
@@ -40,8 +69,69 @@ class ReceiptOcrService {
     return ReceiptScanResult(
       amount: amount,
       merchant: merchant,
+      items: _findLineItems(lines),
       rawText: rawText,
     );
+  }
+
+  static List<ReceiptLineItem> _findLineItems(List<String> lines) {
+    final items = <ReceiptLineItem>[];
+    final itemPattern = RegExp(
+      r'^(.+?)\s+(?:₹|Rs\.?|INR|\$|USD)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+(?:\.\d{2}))$',
+      caseSensitive: false,
+    );
+    final excluded = RegExp(
+      r'\b(?:grand\s*total|sub\s*total|total|amount\s*due|net\s*amount|tax|gst|vat|discount|change|cash|card|upi|invoice|date|phone)\b',
+      caseSensitive: false,
+    );
+
+    for (final line in lines) {
+      if (excluded.hasMatch(line)) continue;
+      final match = itemPattern.firstMatch(line);
+      if (match == null) continue;
+      final title = match
+          .group(1)!
+          .replaceFirst(RegExp(r'^\d+\s*[xX]\s*'), '')
+          .trim();
+      final amount = double.tryParse(match.group(2)!.replaceAll(',', ''));
+      if (title.length < 2 || amount == null || amount <= 0) continue;
+      items.add(
+        ReceiptLineItem(
+          title: title,
+          amount: amount,
+          category: _categoryFor(title),
+        ),
+      );
+    }
+    return items;
+  }
+
+  static ExpenseCategory _categoryFor(String title) {
+    final text = title.toLowerCase();
+    if (RegExp(
+      r'food|milk|bread|rice|vegetable|fruit|grocery|coffee|tea|meal|pizza|burger|snack|restaurant',
+    ).hasMatch(text)) {
+      return ExpenseCategory.food;
+    }
+    if (RegExp(
+      r'petrol|diesel|fuel|taxi|uber|ola|metro|bus|train|parking',
+    ).hasMatch(text)) {
+      return ExpenseCategory.transport;
+    }
+    if (RegExp(
+      r'electricity|water|gas|internet|wifi|mobile|recharge|phone',
+    ).hasMatch(text)) {
+      return ExpenseCategory.utilities;
+    }
+    if (RegExp(r'movie|cinema|game|netflix|spotify|concert').hasMatch(text)) {
+      return ExpenseCategory.entertainment;
+    }
+    if (RegExp(
+      r'shirt|shoe|dress|bag|cosmetic|clothing|stationery',
+    ).hasMatch(text)) {
+      return ExpenseCategory.shopping;
+    }
+    return ExpenseCategory.other;
   }
 
   static double? _findTotal(List<String> lines) {
