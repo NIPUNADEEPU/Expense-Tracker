@@ -84,16 +84,50 @@ class ReceiptOcrService {
       r'\b(?:grand\s*total|sub\s*total|total|amount\s*due|net\s*amount|tax|gst|vat|discount|change|cash|card|upi|invoice|date|phone)\b',
       caseSensitive: false,
     );
+    // Accept a currency symbol that OCR returns as a Unicode character rather
+    // than assuming a specific encoding for the rupee sign.
+    final genericItemPattern = RegExp(
+      r'^(.+?)\s+(?:[^\d\s]+\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)$',
+      caseSensitive: false,
+    );
+    final amountOnlyPattern = RegExp(
+      r'^[^\d]*\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)$',
+      caseSensitive: false,
+    );
 
-    for (final line in lines) {
+    for (var index = 0; index < lines.length; index++) {
+      final line = lines[index];
       if (excluded.hasMatch(line)) continue;
-      final match = itemPattern.firstMatch(line);
-      if (match == null) continue;
-      final title = match
-          .group(1)!
+      final match = itemPattern.firstMatch(line) ??
+          genericItemPattern.firstMatch(line);
+      String? title = match?.group(1);
+      String? amountText = match?.group(2);
+
+      // A common POS receipt layout puts the product name and price on
+      // consecutive lines rather than one line.
+      if (match == null) {
+        final amountOnlyMatch = amountOnlyPattern.firstMatch(line);
+        if (amountOnlyMatch != null && index > 0) {
+          final previousLine = lines[index - 1];
+          if (!excluded.hasMatch(previousLine) &&
+              amountOnlyPattern.firstMatch(previousLine) == null) {
+            title = previousLine;
+            amountText = amountOnlyMatch.group(1);
+          }
+        }
+      }
+
+      if (title == null || amountText == null) continue;
+      title = title
           .replaceFirst(RegExp(r'^\d+\s*[xX]\s*'), '')
+          .replaceFirst(RegExp(r'^\d+\s+'), '')
+          // Remove a quantity or unit-price column left before the final
+          // amount, such as "Milk 2 30.00 60.00".
+          .replaceFirst(RegExp(r'\s+\d+(?:\.\d{1,2})?\s*$'), '')
+          .replaceFirst(RegExp(r'\s+\d+(?:\.\d{1,2})?\s*$'), '')
+          .replaceFirst(RegExp(r'^[*-]\s*'), '')
           .trim();
-      final amount = double.tryParse(match.group(2)!.replaceAll(',', ''));
+      final amount = double.tryParse(amountText.replaceAll(',', ''));
       if (title.length < 2 || amount == null || amount <= 0) continue;
       items.add(
         ReceiptLineItem(

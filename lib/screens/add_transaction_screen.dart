@@ -90,10 +90,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
       setState(() {
         _receiptItems = result.items;
-        // A total is useful only when the receipt did not yield separate items.
-        if (result.items.isEmpty && result.amount != null) {
-          _amountController.text = result.amount!.toStringAsFixed(2);
-        }
         if (result.merchant != null && _titleController.text.trim().isEmpty) {
           _titleController.text = result.merchant!;
         }
@@ -101,9 +97,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
       final message = result.items.isNotEmpty
           ? '${result.items.length} receipt items found. Review their categories before saving.'
-          : result.amount == null
-          ? 'Text was found, but no receipt total could be detected. Please enter it manually.'
-          : 'Receipt total found. Please review the details before saving.';
+          : 'No individual receipt items were recognized. Try a clearer, straight photo.';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
