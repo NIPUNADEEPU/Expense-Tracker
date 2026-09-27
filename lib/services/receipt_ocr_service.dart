@@ -19,7 +19,9 @@ class ReceiptLineItem {
 
   double get amount => totalPrice;
 
-  ReceiptLineItem copyWith({ExpenseCategory? category}) {
+  ReceiptLineItem copyWith({
+    ExpenseCategory? category,
+  }) {
     return ReceiptLineItem(
       title: title,
       totalPrice: totalPrice,
@@ -40,36 +42,47 @@ class ReceiptScanResult {
 
   final double? amount;
 
-  /// Merchant/store/restaurant name.
+  /// Store / restaurant / business name.
   final String? title;
 
   String? get merchant => title;
 
   final List<ReceiptLineItem> items;
+
+  /// Complete OCR text.
   final String rawText;
 }
 
 class ReceiptOcrService {
-  ReceiptOcrService({TextRecognizer? recognizer})
-    : _recognizer =
-          recognizer ?? TextRecognizer(script: TextRecognitionScript.latin),
-      _ownsRecognizer = recognizer == null;
+  ReceiptOcrService({
+    TextRecognizer? recognizer,
+  })  : _recognizer = recognizer ??
+            TextRecognizer(
+              script: TextRecognitionScript.latin,
+            ),
+        _ownsRecognizer = recognizer == null;
 
   final TextRecognizer _recognizer;
   final bool _ownsRecognizer;
 
   // ================================================================
-  // PUBLIC OCR METHOD
+  // OCR
   // ================================================================
 
-  Future<ReceiptScanResult> scanImage(String imagePath) async {
+  Future<ReceiptScanResult> scanImage(
+    String imagePath,
+  ) async {
     final recognizedText = await _recognizer.processImage(
       InputImage.fromFilePath(imagePath),
     );
 
-    final visualText = _textInVisualRows(recognizedText);
+    final visualText = _textInVisualRows(
+      recognizedText,
+    );
 
-    return parseRecognizedText(visualText);
+    return parseRecognizedText(
+      visualText,
+    );
   }
 
   Future<void> dispose() async {
@@ -79,27 +92,25 @@ class ReceiptOcrService {
   }
 
   // ================================================================
-  // REBUILD OCR INTO VISUAL ROWS
-  // ================================================================
-  //
-  // ML Kit can return:
-  //
-  // ITEM BLOCK       QTY BLOCK       PRICE BLOCK       TOTAL BLOCK
-  //
-  // as separate blocks.
-  //
-  // This method reconstructs them according to their Y and X
-  // positions so that a receipt table becomes one logical row.
-  //
+  // REBUILD OCR TEXT USING VISUAL POSITION
   // ================================================================
 
-  static String _textInVisualRows(RecognizedText recognizedText) {
-    final lines =
-        recognizedText.blocks
-            .expand((block) => block.lines)
-            .where((line) => line.text.trim().isNotEmpty)
-            .toList()
-          ..sort((a, b) => a.boundingBox.top.compareTo(b.boundingBox.top));
+  static String _textInVisualRows(
+    RecognizedText recognizedText,
+  ) {
+    final lines = recognizedText.blocks
+        .expand(
+          (block) => block.lines,
+        )
+        .where(
+          (line) => line.text.trim().isNotEmpty,
+        )
+        .toList()
+      ..sort(
+        (a, b) => a.boundingBox.top.compareTo(
+          b.boundingBox.top,
+        ),
+      );
 
     if (lines.isEmpty) {
       return recognizedText.text;
@@ -108,7 +119,9 @@ class ReceiptOcrService {
     final rows = <List<TextLine>>[];
 
     for (final line in lines) {
-      final centerY = line.boundingBox.top + line.boundingBox.height / 2;
+      final centerY =
+          line.boundingBox.top +
+          line.boundingBox.height / 2;
 
       List<TextLine>? matchingRow;
 
@@ -116,15 +129,18 @@ class ReceiptOcrService {
         final reference = row.first;
 
         final referenceCenterY =
-            reference.boundingBox.top + reference.boundingBox.height / 2;
+            reference.boundingBox.top +
+            reference.boundingBox.height / 2;
 
         final tolerance =
-            (reference.boundingBox.height > line.boundingBox.height
+            (reference.boundingBox.height >
+                    line.boundingBox.height
                 ? reference.boundingBox.height
                 : line.boundingBox.height) *
             0.65;
 
-        if ((centerY - referenceCenterY).abs() <= tolerance) {
+        if ((centerY - referenceCenterY).abs() <=
+            tolerance) {
           matchingRow = row;
           break;
         }
@@ -139,24 +155,34 @@ class ReceiptOcrService {
       row.add(line);
     }
 
-    return rows
-        .map((row) {
-          row.sort((a, b) => a.boundingBox.left.compareTo(b.boundingBox.left));
+    return rows.map((row) {
+      row.sort(
+        (a, b) => a.boundingBox.left.compareTo(
+          b.boundingBox.left,
+        ),
+      );
 
-          return row.map((line) => line.text.trim()).join('   ');
-        })
-        .join('\n');
+      return row
+          .map(
+            (line) => line.text.trim(),
+          )
+          .join('   ');
+    }).join('\n');
   }
 
   // ================================================================
   // MAIN PARSER
   // ================================================================
 
-  static ReceiptScanResult parseRecognizedText(String rawText) {
+  static ReceiptScanResult parseRecognizedText(
+    String rawText,
+  ) {
     final lines = rawText
         .split(RegExp(r'\r?\n'))
         .map(_normalizeLine)
-        .where((line) => line.isNotEmpty)
+        .where(
+          (line) => line.isNotEmpty,
+        )
         .toList();
 
     final merchant = _findMerchant(lines);
@@ -165,8 +191,8 @@ class ReceiptOcrService {
 
     final total =
         _findTotal(lines) ??
-        _findLargestReasonableAmount(lines) ??
-        _calculateTotalFromItems(items);
+        _calculateTotalFromItems(items) ??
+        _findLargestReasonableAmount(lines);
 
     return ReceiptScanResult(
       amount: total,
@@ -177,148 +203,179 @@ class ReceiptOcrService {
   }
 
   // ================================================================
-  // ITEM EXTRACTION
+  // FIND LINE ITEMS
   // ================================================================
 
-  static List<ReceiptLineItem> _findLineItems(List<String> lines) {
+  static List<ReceiptLineItem> _findLineItems(
+    List<String> lines,
+  ) {
+    final items = <ReceiptLineItem>[];
+
     if (lines.isEmpty) {
-      return [];
+      return items;
     }
 
-    final result = <ReceiptLineItem>[];
+    final start = _findItemSectionStart(lines);
 
-    // Find where the item section probably begins.
-    final itemStart = _findItemSectionStart(lines);
+    final end = _findItemSectionEnd(
+      lines,
+      start,
+    );
 
-    // Find where the item section ends.
-    final itemEnd = _findItemSectionEnd(lines, itemStart);
+    if (start >= end) {
+      return items;
+    }
 
-    final candidateLines = lines.sublist(itemStart, itemEnd);
+    final candidateLines = lines.sublist(
+      start,
+      end,
+    );
 
     for (var i = 0; i < candidateLines.length; i++) {
-      final line = candidateLines[i];
+      final line = candidateLines[i].trim();
 
-      if (_isClearlyNonItem(line)) {
+      if (line.isEmpty) {
+        continue;
+      }
+
+      // Ignore code-only lines.
+      if (_isCodeOnlyLine(line)) {
+        continue;
+      }
+
+      // Ignore metadata / totals / payment.
+      if (_isNonItemLine(line)) {
         continue;
       }
 
       // ------------------------------------------------------------
-      // FORMAT 1
+      // TABLE FORMAT
       //
-      // Item        Qty      Unit Price      Total
-      //
-      // Milk         2         30.00         60.00
-      //
+      // ITEM       QTY       PRICE       TOTAL
+      // Milk        2        30.00       60.00
       // ------------------------------------------------------------
 
-      final table = _parseTableRow(line);
+      final tableItem =
+          _parseReceiptTableItem(line);
 
-      if (table != null) {
-        result.add(table);
+      if (tableItem != null) {
+        items.add(tableItem);
         continue;
       }
 
       // ------------------------------------------------------------
-      // FORMAT 2
+      // SIMPLE FORMAT
       //
-      // Item                    Total
-      //
-      // Bread                   40.00
-      //
+      // Milk                         60.00
+      // Bread                        40.00
       // ------------------------------------------------------------
 
-      final simple = _parseSimpleItem(line);
+      final simpleItem =
+          _parseSimpleReceiptItem(line);
 
-      if (simple != null) {
-        result.add(simple);
+      if (simpleItem != null) {
+        items.add(simpleItem);
         continue;
       }
 
       // ------------------------------------------------------------
-      // FORMAT 3
+      // TWO-LINE FORMAT
       //
-      // Item
-      // 40.00
-      //
-      // Some OCR engines separate the item and price.
+      // Milk
+      // 60.00
       // ------------------------------------------------------------
 
       if (i + 1 < candidateLines.length) {
-        final nextLine = candidateLines[i + 1];
+        final nextLine =
+            candidateLines[i + 1];
 
-        final amount = _parseStandaloneAmount(nextLine);
+        final price =
+            _parseStandalonePrice(nextLine);
 
-        if (amount != null &&
-            !_isClearlyNonItem(line) &&
-            _looksLikeItemName(line)) {
-          result.add(
-            ReceiptLineItem(
-              title: _cleanItemName(line),
-              quantity: 1,
-              unitPrice: amount,
-              totalPrice: amount,
-              category: _categoryFor(_cleanItemName(line)),
-            ),
-          );
+        if (price != null &&
+            _looksLikeProductName(line)) {
+          final productName =
+              _cleanProductName(line);
 
-          i++;
+          if (_isValidProductName(productName)) {
+            items.add(
+              ReceiptLineItem(
+                title: productName,
+                quantity: 1,
+                unitPrice: price,
+                totalPrice: price,
+                category: _categoryFor(
+                  productName,
+                ),
+              ),
+            );
+
+            i++;
+          }
         }
       }
     }
 
-    return _removeDuplicateItems(result);
+    return _removeDuplicateItems(items);
   }
 
   // ================================================================
-  // FIND ITEM SECTION START
+  // FIND START OF PURCHASE SECTION
   // ================================================================
 
-  static int _findItemSectionStart(List<String> lines) {
-    final itemHeader = RegExp(
-      r'\b(?:item|items|description|product|'
-      r'particulars|details)\b',
+  static int _findItemSectionStart(
+    List<String> lines,
+  ) {
+    // Receipts with an explicit item header.
+    final header = RegExp(
+      r'^\s*(?:'
+      r'item|items|'
+      r'product|products|'
+      r'description|'
+      r'particulars|'
+      r'details'
+      r')\b',
       caseSensitive: false,
     );
 
     for (var i = 0; i < lines.length; i++) {
-      if (itemHeader.hasMatch(lines[i])) {
+      if (header.hasMatch(lines[i])) {
         return i + 1;
       }
     }
 
-    // No item header.
+    // Receipts without an ITEM header.
     //
-    // Many simple receipts have:
-    //
-    // STORE
-    // ADDRESS
-    // PHONE
-    // DATE
-    // ----------------
-    // Item 10.00
-    //
-    // Start after obvious metadata.
+    // Find the first line that is strongly identified
+    // as a purchase line.
     for (var i = 0; i < lines.length; i++) {
-      if (_looksLikeItem(lines[i])) {
+      if (_looksLikePurchaseLine(lines[i])) {
         return i;
       }
     }
 
-    return 0;
+    return lines.length;
   }
 
   // ================================================================
-  // FIND ITEM SECTION END
+  // FIND END OF PURCHASE SECTION
   // ================================================================
 
-  static int _findItemSectionEnd(List<String> lines, int start) {
+  static int _findItemSectionEnd(
+    List<String> lines,
+    int start,
+  ) {
     final endPattern = RegExp(
       r'\b(?:'
-      r'subtotal|sub\s*total|'
+      r'subtotal|'
+      r'sub\s*total|'
       r'grand\s*total|'
       r'total|'
       r'amount\s*due|'
       r'net\s*amount|'
+      r'final\s*amount|'
+      r'payable|'
+      r'balance\s*due|'
       r'tax|'
       r'gst|'
       r'cgst|'
@@ -329,8 +386,6 @@ class ReceiptOcrService {
       r'change|'
       r'balance|'
       r'payment|'
-      r'payment\s*mode|'
-      r'payment\s*status|'
       r'paid'
       r')\b',
       caseSensitive: false,
@@ -346,21 +401,142 @@ class ReceiptOcrService {
   }
 
   // ================================================================
-  // PARSE TABLE ROW
+  // DETERMINE WHETHER A LINE IS A PURCHASE
   // ================================================================
 
-  static ReceiptLineItem? _parseTableRow(String line) {
-    var cleaned = line.trim();
+  static bool _looksLikePurchaseLine(
+    String line,
+  ) {
+    final text = line.trim();
 
-    // Remove item numbering.
-    cleaned = cleaned.replaceFirst(RegExp(r'^\s*\d+\s*[\.\)\-:]\s*'), '');
+    if (text.isEmpty) {
+      return false;
+    }
 
-    // ------------------------------------------------------------
-    // Pattern:
+    // Pure codes / numbers are never products.
+    if (_isCodeOnlyLine(text)) {
+      return false;
+    }
+
+    // Metadata is never a product.
+    if (_looksLikeMetadata(text)) {
+      return false;
+    }
+
+    if (_isNonItemLine(text)) {
+      return false;
+    }
+
+    // Key rule:
     //
-    // Name   Qty   Price   Amount
+    // Receipt metadata commonly uses:
     //
-    // ------------------------------------------------------------
+    // ID: 004
+    // CARD: **** 4411
+    // TYPE: VISA
+    //
+    // A product line generally does not.
+    if (text.contains(':')) {
+      return false;
+    }
+
+    // Addresses are not purchases.
+    if (_looksLikeAddress(text)) {
+      return false;
+    }
+
+    // A purchase line must end with a price.
+    final pricePattern = RegExp(
+      r'(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
+      r'\d+(?:,\d{3})*(?:\.\d{1,2})?\s*$',
+      caseSensitive: false,
+    );
+
+    if (!pricePattern.hasMatch(text)) {
+      return false;
+    }
+
+    final productPart = text.replaceFirst(
+      pricePattern,
+      '',
+    ).trim();
+
+    final productName =
+        _cleanProductName(productPart);
+
+    return _isValidProductName(productName);
+  }
+
+  // ================================================================
+  // ADDRESS DETECTION
+  // ================================================================
+
+  static bool _looksLikeAddress(
+    String text,
+  ) {
+    final value = text.trim();
+
+    // US address:
+    //
+    // SPRINGFIELD, IL 62701
+    //
+    if (RegExp(
+      r'^[A-Za-z .]+,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?$',
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // Indian address:
+    //
+    // Bengaluru, Karnataka 560001
+    //
+    if (RegExp(
+      r'^[A-Za-z .]+,\s*[A-Za-z .]+\s+\d{5,6}$',
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // Street address:
+    //
+    // 101 MAIN STREET
+    // 123 MG ROAD
+    // 45 PARK AVENUE
+    //
+    if (RegExp(
+      r'\b(?:'
+      r'street|st\.|'
+      r'road|rd\.|'
+      r'avenue|ave\.|'
+      r'lane|ln\.|'
+      r'parkway|pkwy\.|'
+      r'highway|hwy\.|'
+      r'block|'
+      r'main\s+street'
+      r')\b',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // ================================================================
+  // TABLE ITEM
+  // ================================================================
+
+  static ReceiptLineItem? _parseReceiptTableItem(
+    String line,
+  ) {
+    var text = line.trim();
+
+    // Remove numbering.
+    text = text.replaceFirst(
+      RegExp(
+        r'^\s*\d+\s*[\.\)\-:]\s*',
+      ),
+      '',
+    );
 
     final pattern = RegExp(
       r'^(.+?)\s+'
@@ -372,53 +548,73 @@ class ReceiptOcrService {
       caseSensitive: false,
     );
 
-    final match = pattern.firstMatch(cleaned);
+    final match = pattern.firstMatch(text);
 
     if (match == null) {
-      return _parseUsingColumns(cleaned);
+      return _parseUsingColumns(text);
     }
 
-    final name = _cleanItemName(match.group(1)!);
+    final rawName = match.group(1)!;
 
-    final quantity = double.tryParse(match.group(2)!);
+    final quantity =
+        double.tryParse(match.group(2)!);
 
-    final unitPrice = double.tryParse(match.group(3)!.replaceAll(',', ''));
+    final unitPrice = double.tryParse(
+      match.group(3)!.replaceAll(',', ''),
+    );
 
-    final total = double.tryParse(match.group(4)!.replaceAll(',', ''));
+    final totalPrice = double.tryParse(
+      match.group(4)!.replaceAll(',', ''),
+    );
 
-    if (!_isValidItemName(name)) {
+    if (quantity == null ||
+        unitPrice == null ||
+        totalPrice == null) {
       return null;
     }
 
-    if (quantity == null || unitPrice == null || total == null || total <= 0) {
+    if (quantity <= 0 ||
+        totalPrice <= 0) {
+      return null;
+    }
+
+    final productName =
+        _cleanProductName(rawName);
+
+    if (!_isValidProductName(productName)) {
       return null;
     }
 
     return ReceiptLineItem(
-      title: name,
+      title: productName,
       quantity: quantity,
       unitPrice: unitPrice,
-      totalPrice: total,
-      category: _categoryFor(name),
+      totalPrice: totalPrice,
+      category: _categoryFor(productName),
     );
   }
 
   // ================================================================
-  // PARSE COLUMN-BASED OCR
+  // COLUMN-BASED TABLE
   // ================================================================
 
-  static ReceiptLineItem? _parseUsingColumns(String line) {
+  static ReceiptLineItem? _parseUsingColumns(
+    String line,
+  ) {
     final columns = line
         .split(RegExp(r'\s{2,}'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
+        .map(
+          (value) => value.trim(),
+        )
+        .where(
+          (value) => value.isNotEmpty,
+        )
         .toList();
 
     if (columns.length < 3) {
       return null;
     }
 
-    // Look for the last three numeric columns.
     final numericIndexes = <int>[];
 
     for (var i = 0; i < columns.length; i++) {
@@ -431,44 +627,74 @@ class ReceiptOcrService {
       return null;
     }
 
-    final totalIndex = numericIndexes[numericIndexes.length - 1];
+    final totalIndex =
+        numericIndexes.last;
 
-    final unitIndex = numericIndexes[numericIndexes.length - 2];
+    final unitIndex =
+        numericIndexes[
+          numericIndexes.length - 2
+        ];
 
-    final qtyIndex = numericIndexes[numericIndexes.length - 3];
+    final quantityIndex =
+        numericIndexes[
+          numericIndexes.length - 3
+        ];
 
-    final nameParts = columns.sublist(0, qtyIndex).join(' ');
+    final nameParts = columns
+        .sublist(0, quantityIndex)
+        .join(' ');
 
-    final name = _cleanItemName(nameParts);
+    final productName =
+        _cleanProductName(nameParts);
 
-    final quantity = _parseNumber(columns[qtyIndex]);
+    final quantity =
+        _parseNumber(
+      columns[quantityIndex],
+    );
 
-    final unitPrice = _parseNumber(columns[unitIndex]);
+    final unitPrice =
+        _parseNumber(
+      columns[unitIndex],
+    );
 
-    final total = _parseNumber(columns[totalIndex]);
+    final total =
+        _parseNumber(
+      columns[totalIndex],
+    );
 
-    if (!_isValidItemName(name)) {
+    if (!_isValidProductName(productName)) {
       return null;
     }
 
-    if (quantity == null || unitPrice == null || total == null || total <= 0) {
+    if (quantity == null ||
+        unitPrice == null ||
+        total == null ||
+        quantity <= 0 ||
+        total <= 0) {
       return null;
     }
 
     return ReceiptLineItem(
-      title: name,
+      title: productName,
       quantity: quantity,
       unitPrice: unitPrice,
       totalPrice: total,
-      category: _categoryFor(name),
+      category: _categoryFor(productName),
     );
   }
 
   // ================================================================
-  // SIMPLE ITEM
+  // SIMPLE PRODUCT + PRICE
   // ================================================================
 
-  static ReceiptLineItem? _parseSimpleItem(String line) {
+  static ReceiptLineItem? _parseSimpleReceiptItem(
+    String line,
+  ) {
+    // This is the important additional protection.
+    if (!_looksLikePurchaseLine(line)) {
+      return null;
+    }
+
     final pattern = RegExp(
       r'^(.+?)\s+'
       r'(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
@@ -482,74 +708,455 @@ class ReceiptOcrService {
       return null;
     }
 
-    final name = _cleanItemName(match.group(1)!);
+    final rawName = match.group(1)!;
 
-    final amount = double.tryParse(match.group(2)!.replaceAll(',', ''));
+    final price = double.tryParse(
+      match.group(2)!.replaceAll(',', ''),
+    );
 
-    if (!_isValidItemName(name)) {
+    if (price == null || price <= 0) {
       return null;
     }
 
-    if (amount == null || amount <= 0) {
+    final productName =
+        _cleanProductName(rawName);
+
+    if (!_isValidProductName(productName)) {
       return null;
     }
 
-    if (_looksLikeMetadata(name)) {
+    if (_looksLikeMetadata(productName)) {
       return null;
     }
 
     return ReceiptLineItem(
-      title: name,
+      title: productName,
       quantity: 1,
-      unitPrice: amount,
-      totalPrice: amount,
-      category: _categoryFor(name),
+      unitPrice: price,
+      totalPrice: price,
+      category: _categoryFor(productName),
     );
   }
 
   // ================================================================
-  // STANDALONE AMOUNT
+  // TWO-LINE PRICE
   // ================================================================
 
-  /// Parses an isolated receipt number, optionally prefixed by a currency
-  /// marker that may have been altered by OCR encoding.
-  static double? _parseNumber(String value) {
-    final normalized = value.replaceAll(RegExp(r'[^0-9,.]'), '').trim();
-    if (!RegExp(r'^\d+(?:,\d{3})*(?:\.\d{1,2})?$').hasMatch(normalized)) {
-      return null;
-    }
-    return double.tryParse(normalized.replaceAll(',', ''));
-  }
-
-  static double? _parseStandaloneAmount(String line) {
-    final cleaned = line.trim();
-
+  static double? _parseStandalonePrice(
+    String line,
+  ) {
     final match = RegExp(
       r'^(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
       r'(\d+(?:,\d{3})*(?:\.\d{1,2})?)$',
       caseSensitive: false,
-    ).firstMatch(cleaned);
+    ).firstMatch(line.trim());
 
     if (match == null) {
       return null;
     }
 
-    return double.tryParse(match.group(1)!.replaceAll(',', ''));
+    return double.tryParse(
+      match.group(1)!.replaceAll(',', ''),
+    );
+  }
+
+  // ================================================================
+  // PRODUCT NAME CLEANING
+  // ================================================================
+
+  static String _cleanProductName(
+    String value,
+  ) {
+    var name = value.trim();
+
+    // --------------------------------------------------------------
+    // Remove item numbering.
+    //
+    // 1. Milk
+    // 2) Bread
+    // 3- Soap
+    // --------------------------------------------------------------
+
+    name = name.replaceFirst(
+      RegExp(
+        r'^\s*\d+\s*[\.\)\-:]\s*',
+      ),
+      '',
+    );
+
+    // --------------------------------------------------------------
+    // Remove leading numeric product codes.
+    //
+    // 04011 BANANAS ORG
+    // -> BANANAS ORG
+    //
+    // 9012345 WHOLE MILK
+    // -> WHOLE MILK
+    // --------------------------------------------------------------
+
+    name = name.replaceFirst(
+      RegExp(
+        r'^\s*\d{4,12}\s+',
+      ),
+      '',
+    );
+
+    // --------------------------------------------------------------
+    // Remove labeled codes.
+    //
+    // SKU12345 BANANAS
+    // PLU 4011 BANANAS
+    // CODE-A893 BANANAS
+    // --------------------------------------------------------------
+
+    name = name.replaceFirst(
+      RegExp(
+        r'^\s*(?:SKU|PLU|CODE|ITEM\s*CODE)'
+        r'[\s:#\-]*[A-Za-z0-9\-_]+'
+        r'\s+',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // --------------------------------------------------------------
+    // Remove trailing #CODE.
+    //
+    // BANANAS ORG #04
+    // -> BANANAS ORG
+    // --------------------------------------------------------------
+
+    name = name.replaceFirst(
+      RegExp(
+        r'\s+#\s*'
+        r'[A-Za-z0-9]+'
+        r'(?:[-_][A-Za-z0-9]+)*\s*$',
+      ),
+      '',
+    );
+
+    // --------------------------------------------------------------
+    // Remove internal code tokens.
+    // --------------------------------------------------------------
+
+    final tokens =
+        name.split(RegExp(r'\s+'));
+
+    final cleanedTokens = <String>[];
+
+    for (final token in tokens) {
+      final cleanToken = token.trim();
+
+      if (cleanToken.isEmpty) {
+        continue;
+      }
+
+      if (_isInternalProductCode(
+        cleanToken,
+      )) {
+        continue;
+      }
+
+      cleanedTokens.add(cleanToken);
+    }
+
+    name = cleanedTokens.join(' ');
+
+    // Remove unwanted surrounding symbols.
+    name = name.replaceAll(
+      RegExp(r'^[\s\-_:|]+'),
+      '',
+    );
+
+    name = name.replaceAll(
+      RegExp(r'[\s\-_:|]+$'),
+      '',
+    );
+
+    // Normalize whitespace.
+    name = name.replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+
+    return name.trim();
+  }
+
+  // ================================================================
+  // INTERNAL PRODUCT CODE
+  // ================================================================
+
+  static bool _isInternalProductCode(
+    String token,
+  ) {
+    var value = token.trim();
+
+    value = value.replaceAll(
+      RegExp(
+        r'^[#.,:;]+|[#.,:;]+$',
+      ),
+      '',
+    );
+
+    if (value.isEmpty) {
+      return false;
+    }
+
+    // Pure numeric codes.
+    //
+    // 04011
+    // 9012345
+    // 12345678
+    //
+    if (RegExp(
+      r'^\d{4,12}$',
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // SKU / PLU / CODE.
+    if (RegExp(
+      r'^(?:SKU|PLU|CODE)[A-Z0-9_-]*$',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // A893-X
+    // ABC-12345
+    if (RegExp(
+      r'^(?=.*[A-Za-z])(?=.*\d)'
+      r'[A-Za-z0-9]+'
+      r'(?:[-_][A-Za-z0-9]+)+$',
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // A893
+    // AB12345
+    if (RegExp(
+      r'^[A-Z]{1,4}\d{3,}$',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // ================================================================
+  // CODE-ONLY LINE
+  // ================================================================
+
+  static bool _isCodeOnlyLine(
+    String line,
+  ) {
+    final value = line.trim();
+
+    if (value.isEmpty) {
+      return true;
+    }
+
+    // Only numbers.
+    if (RegExp(
+      r'^\d+$',
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // Numbers and symbols only.
+    if (RegExp(
+      r'^[\d\s\-_/.,:#*]+$',
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    // Long barcode-like number.
+    final digitsOnly =
+        value.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+
+    if (digitsOnly.length >= 8 &&
+        RegExp(r'^\d+$')
+            .hasMatch(digitsOnly)) {
+      return true;
+    }
+
+    if (_isInternalProductCode(value)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // ================================================================
+  // PRODUCT NAME VALIDATION
+  // ================================================================
+
+  static bool _looksLikeProductName(
+    String line,
+  ) {
+    final value = line.trim();
+
+    if (value.isEmpty ||
+        value.contains(':') ||
+        _isCodeOnlyLine(value) ||
+        _looksLikeAddress(value) ||
+        _looksLikeMetadata(value)) {
+      return false;
+    }
+
+    return _isValidProductName(
+      _cleanProductName(value),
+    );
+  }
+
+  static bool _isValidProductName(
+    String name,
+  ) {
+    if (name.length < 2) {
+      return false;
+    }
+
+    // Product must contain letters.
+    if (!RegExp(
+      r'[A-Za-z]',
+    ).hasMatch(name)) {
+      return false;
+    }
+
+    // Reject headers.
+    if (RegExp(
+      r'^(?:'
+      r'item|items|'
+      r'product|products|'
+      r'description|'
+      r'particulars|'
+      r'details|'
+      r'qty|quantity|'
+      r'unit|price|amount|total'
+      r')$',
+      caseSensitive: false,
+    ).hasMatch(name.trim())) {
+      return false;
+    }
+
+    // Reject codes.
+    if (_isCodeOnlyLine(name)) {
+      return false;
+    }
+
+    // Reject metadata.
+    if (_looksLikeMetadata(name)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // ================================================================
+  // NON-ITEM LINE
+  // ================================================================
+
+  static bool _isNonItemLine(
+    String line,
+  ) {
+    if (_isCodeOnlyLine(line)) {
+      return true;
+    }
+
+    if (_looksLikeMetadata(line)) {
+      return true;
+    }
+
+    if (RegExp(
+      r'\b(?:'
+      r'subtotal|'
+      r'sub\s*total|'
+      r'grand\s*total|'
+      r'total|'
+      r'amount\s*due|'
+      r'net\s*amount|'
+      r'final\s*amount|'
+      r'tax|'
+      r'gst|'
+      r'cgst|'
+      r'sgst|'
+      r'vat|'
+      r'discount|'
+      r'round(?:ing)?|'
+      r'payment|'
+      r'paid|'
+      r'tender|'
+      r'cash|'
+      r'card|'
+      r'upi|'
+      r'change|'
+      r'balance|'
+      r'thank\s+you|'
+      r'visit\s+again'
+      r')\b',
+      caseSensitive: false,
+    ).hasMatch(line)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // ================================================================
+  // METADATA
+  // ================================================================
+
+  static bool _looksLikeMetadata(
+    String text,
+  ) {
+    return RegExp(
+      r'\b(?:'
+      r'id|'
+      r'address|'
+      r'phone|ph|tel|mobile|'
+      r'date|time|'
+      r'invoice|invoice\s*no|'
+      r'bill|bill\s*no|'
+      r'receipt|receipt\s*no|'
+      r'cashier|manager|operator|'
+      r'gstin|gst|cgst|sgst|vat|'
+      r'txn|transaction|'
+      r'reference|ref|'
+      r'customer|'
+      r'order|'
+      r'table|'
+      r'token|'
+      r'register|'
+      r'card|'
+      r'type|'
+      r'entry|'
+      r'status|'
+      r'payment'
+      r')\b',
+      caseSensitive: false,
+    ).hasMatch(text.trim());
   }
 
   // ================================================================
   // MERCHANT / STORE NAME
   // ================================================================
 
-  static String? _findMerchant(List<String> lines) {
+  static String? _findMerchant(
+    List<String> lines,
+  ) {
     if (lines.isEmpty) {
       return null;
     }
 
     final ignored = RegExp(
       r'\b(?:'
-      r'address|road|rd|street|st|avenue|ave|lane|'
-      r'nagar|city|pincode|pin|'
+      r'address|road|rd|street|st|'
+      r'avenue|ave|lane|nagar|'
+      r'city|pincode|pin|'
       r'phone|ph\.?|mobile|tel|'
       r'date|time|'
       r'gstin|gst|vat|'
@@ -557,7 +1164,8 @@ class ReceiptOcrService {
       r'bill|bill\s*no|'
       r'receipt|'
       r'cashier|manager|operator|'
-      r'customer|order|table|token'
+      r'customer|order|table|token|'
+      r'id|register'
       r')\b',
       caseSensitive: false,
     );
@@ -575,16 +1183,21 @@ class ReceiptOcrService {
 
     final candidates = <String>[];
 
-    final limit = lines.length < 12 ? lines.length : 12;
+    final limit =
+        lines.length < 12
+            ? lines.length
+            : 12;
 
     for (var i = 0; i < limit; i++) {
-      final line = lines[i];
+      final line = lines[i].trim();
 
       if (line.length < 3) {
         continue;
       }
 
-      if (!RegExp(r'[A-Za-z]').hasMatch(line)) {
+      if (!RegExp(
+        r'[A-Za-z]',
+      ).hasMatch(line)) {
         continue;
       }
 
@@ -607,33 +1220,30 @@ class ReceiptOcrService {
       return null;
     }
 
-    // ------------------------------------------------------------
-    // Combine a business name with a generic business type.
-    //
-    // Example:
+    // Combine:
     //
     // FRESH MART
     // SUPERMARKET
     //
-    // becomes:
-    //
-    // FRESH MART SUPERMARKET
-    //
-    // This is generic — no store name is hardcoded.
-    // ------------------------------------------------------------
+    // -> FRESH MART SUPERMARKET
 
-    if (lines.length >= 2) {
-      for (var i = 0; i < limit - 1; i++) {
-        final first = lines[i];
-        final second = lines[i + 1];
+    final combineLimit =
+        lines.length < 12
+            ? lines.length - 1
+            : 11;
 
-        if (!_isPotentialMerchant(first)) {
-          continue;
-        }
+    for (var i = 0;
+        i < combineLimit;
+        i++) {
+      final first = lines[i];
+      final second = lines[i + 1];
 
-        if (_isBusinessType(second)) {
-          return '$first $second';
-        }
+      if (!_isPotentialMerchant(first)) {
+        continue;
+      }
+
+      if (_isBusinessType(second)) {
+        return '$first $second';
       }
     }
 
@@ -644,8 +1254,11 @@ class ReceiptOcrService {
   // BUSINESS TYPE
   // ================================================================
 
-  static bool _isBusinessType(String value) {
-    final normalized = value.toLowerCase().trim();
+  static bool _isBusinessType(
+    String value,
+  ) {
+    final normalized =
+        value.toLowerCase().trim();
 
     return RegExp(
       r'^(?:'
@@ -673,16 +1286,20 @@ class ReceiptOcrService {
     ).hasMatch(normalized);
   }
 
-  static bool _isPotentialMerchant(String line) {
+  static bool _isPotentialMerchant(
+    String line,
+  ) {
     if (line.length < 3) {
       return false;
     }
 
-    if (!RegExp(r'[A-Za-z]').hasMatch(line)) {
+    if (!RegExp(
+      r'[A-Za-z]',
+    ).hasMatch(line)) {
       return false;
     }
 
-    if (_isClearlyNonItem(line)) {
+    if (_isNonItemLine(line)) {
       return false;
     }
 
@@ -691,191 +1308,15 @@ class ReceiptOcrService {
     }
 
     return true;
-  }
-
-  // ================================================================
-  // ITEM NAME VALIDATION
-  // ================================================================
-
-  static bool _isValidItemName(String name) {
-    if (name.length < 2) {
-      return false;
-    }
-
-    if (!RegExp(r'[A-Za-z]').hasMatch(name)) {
-      return false;
-    }
-
-    final normalized = name.toLowerCase().trim();
-
-    if (RegExp(
-      r'^(?:'
-      r'item|items|description|product|'
-      r'particulars|details|'
-      r'qty|quantity|unit|price|amount|total'
-      r')$',
-      caseSensitive: false,
-    ).hasMatch(normalized)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  // ================================================================
-  // NON-ITEM DETECTION
-  // ================================================================
-
-  static bool _isClearlyNonItem(String line) {
-    if (line.trim().isEmpty) {
-      return true;
-    }
-
-    // Separators.
-    if (RegExp(r'^[-_=.*•:]+$').hasMatch(line.trim())) {
-      return true;
-    }
-
-    // Barcode / long numeric strings.
-    if (RegExp(r'^\s*\d{8,}\s*$').hasMatch(line)) {
-      return true;
-    }
-
-    if (_looksLikeMetadata(line)) {
-      return true;
-    }
-
-    final excluded = RegExp(
-      r'\b(?:'
-      r'subtotal|sub\s*total|'
-      r'grand\s*total|'
-      r'total|'
-      r'amount\s*due|'
-      r'net\s*amount|'
-      r'tax|'
-      r'gst|'
-      r'cgst|'
-      r'sgst|'
-      r'vat|'
-      r'discount|'
-      r'round(?:ing)?|'
-      r'change|'
-      r'balance|'
-      r'payment|'
-      r'paid|'
-      r'tender|'
-      r'cash|'
-      r'card|'
-      r'upi|'
-      r'visit\s+again|'
-      r'thank\s+you|'
-      r'welcome|'
-      r'loyalty|'
-      r'points|'
-      r'saving'
-      r')\b',
-      caseSensitive: false,
-    );
-
-    return excluded.hasMatch(line);
-  }
-
-  // ================================================================
-  // METADATA DETECTION
-  // ================================================================
-
-  static bool _looksLikeMetadata(String text) {
-    return RegExp(
-      r'^(?:'
-      r'phone|ph|tel|mobile|'
-      r'date|time|'
-      r'invoice|invoice\s*no|'
-      r'bill|bill\s*no|'
-      r'receipt|receipt\s*no|'
-      r'cashier|manager|operator|'
-      r'gstin|gst|vat|'
-      r'txn|transaction|'
-      r'reference|ref|'
-      r'customer|'
-      r'payment|'
-      r'order|'
-      r'table|'
-      r'token'
-      r')\b',
-      caseSensitive: false,
-    ).hasMatch(text.trim());
-  }
-
-  // ================================================================
-  // LOOKS LIKE ITEM
-  // ================================================================
-
-  static bool _looksLikeItem(String line) {
-    if (_isClearlyNonItem(line)) {
-      return false;
-    }
-
-    if (!_looksLikeItemName(_removeTrailingAmount(line))) {
-      return false;
-    }
-
-    return true;
-  }
-
-  static bool _looksLikeItemName(String text) {
-    final name = _cleanItemName(text);
-
-    if (!_isValidItemName(name)) {
-      return false;
-    }
-
-    if (_looksLikeMetadata(name)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  static String _removeTrailingAmount(String line) {
-    return line.replaceFirst(
-      RegExp(
-        r'\s+(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
-        r'\d+(?:,\d{3})*(?:\.\d{1,2})?$',
-        caseSensitive: false,
-      ),
-      '',
-    );
-  }
-
-  // ================================================================
-  // CLEAN ITEM NAME
-  // ================================================================
-
-  static String _cleanItemName(String value) {
-    var name = value.trim();
-
-    // Remove numbering:
-    //
-    // 1. Rice
-    // 2) Milk
-    // 3- Bread
-    //
-    name = name.replaceFirst(RegExp(r'^\s*\d+\s*[\.\)\-:]\s*'), '');
-
-    // Remove leading currency symbol.
-    name = name.replaceFirst(RegExp(r'^[₹$€£]\s*'), '');
-
-    // Normalize whitespace.
-    name = name.replaceAll(RegExp(r'\s+'), ' ');
-
-    return name.trim();
   }
 
   // ================================================================
   // TOTAL DETECTION
   // ================================================================
 
-  static double? _findTotal(List<String> lines) {
+  static double? _findTotal(
+    List<String> lines,
+  ) {
     final totalLabels = RegExp(
       r'\b(?:'
       r'grand\s*total|'
@@ -890,26 +1331,32 @@ class ReceiptOcrService {
       caseSensitive: false,
     );
 
-    for (var i = lines.length - 1; i >= 0; i--) {
+    for (var i = lines.length - 1;
+        i >= 0;
+        i--) {
       final line = lines[i];
 
       if (!totalLabels.hasMatch(line)) {
         continue;
       }
 
-      final amounts = _amountsIn(line);
+      final amounts =
+          _amountsIn(line);
 
       if (amounts.isNotEmpty) {
         return amounts.last;
       }
 
-      // Sometimes OCR separates:
+      // Handles:
       //
       // TOTAL
       // 707.70
-      //
+
       if (i + 1 < lines.length) {
-        final nextAmount = _parseStandaloneAmount(lines[i + 1]);
+        final nextAmount =
+            _parseStandalonePrice(
+          lines[i + 1],
+        );
 
         if (nextAmount != null) {
           return nextAmount;
@@ -924,16 +1371,27 @@ class ReceiptOcrService {
   // AMOUNTS
   // ================================================================
 
-  static List<double> _amountsIn(String text) {
+  static List<double> _amountsIn(
+    String text,
+  ) {
     return RegExp(
-          r'(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
-          r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+(?:\.\d{2}))',
-          caseSensitive: false,
-        )
+      r'(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
+      r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})|'
+      r'\d+(?:\.\d{2}))',
+      caseSensitive: false,
+    )
         .allMatches(text)
-        .map((match) => double.tryParse(match.group(1)!.replaceAll(',', '')))
+        .map(
+          (match) => double.tryParse(
+            match
+                .group(1)!
+                .replaceAll(',', ''),
+          ),
+        )
         .whereType<double>()
-        .where((value) => value > 0)
+        .where(
+          (value) => value > 0,
+        )
         .toList();
   }
 
@@ -941,17 +1399,19 @@ class ReceiptOcrService {
   // FALLBACK TOTAL
   // ================================================================
 
-  static double? _findLargestReasonableAmount(List<String> lines) {
+  static double? _findLargestReasonableAmount(
+    List<String> lines,
+  ) {
     final values = <double>[];
 
     for (final line in lines) {
-      if (_isClearlyNonItem(line)) {
+      if (_isNonItemLine(line)) {
         continue;
       }
 
-      for (final value in _amountsIn(line)) {
-        values.add(value);
-      }
+      values.addAll(
+        _amountsIn(line),
+      );
     }
 
     if (values.isEmpty) {
@@ -964,15 +1424,21 @@ class ReceiptOcrService {
   }
 
   // ================================================================
-  // CALCULATE FROM ITEMS
+  // CALCULATE TOTAL FROM ITEMS
   // ================================================================
 
-  static double? _calculateTotalFromItems(List<ReceiptLineItem> items) {
+  static double? _calculateTotalFromItems(
+    List<ReceiptLineItem> items,
+  ) {
     if (items.isEmpty) {
       return null;
     }
 
-    final total = items.fold<double>(0, (sum, item) => sum + item.totalPrice);
+    final total = items.fold<double>(
+      0,
+      (sum, item) =>
+          sum + item.totalPrice,
+    );
 
     return total > 0 ? total : null;
   }
@@ -1006,10 +1472,18 @@ class ReceiptOcrService {
   // NORMALIZE OCR LINE
   // ================================================================
 
-  static String _normalizeLine(String line) {
+  static String _normalizeLine(
+    String line,
+  ) {
     return line
-        .replaceAll(RegExp(r'[|]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(
+          RegExp(r'[|]'),
+          ' ',
+        )
+        .replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        )
         .trim();
   }
 
@@ -1017,9 +1491,9 @@ class ReceiptOcrService {
   // SLOGAN DETECTION
   // ================================================================
 
-  static bool _looksLikeSlogan(String line) {
-    final text = line.toLowerCase();
-
+  static bool _looksLikeSlogan(
+    String line,
+  ) {
     return RegExp(
       r'\b(?:'
       r'good\s+food|'
@@ -1031,24 +1505,46 @@ class ReceiptOcrService {
       r'come\s+again'
       r')\b',
       caseSensitive: false,
-    ).hasMatch(text);
+    ).hasMatch(line);
   }
 
   // ================================================================
-  // CATEGORY
-  // ================================================================
-  //
-  // Your teammates can later replace this with the ML classifier.
-  //
+  // NUMBER PARSER
   // ================================================================
 
-  static ExpenseCategory _categoryFor(String title) {
-    final text = title.toLowerCase();
+  static double? _parseNumber(
+    String value,
+  ) {
+    final match = RegExp(
+      r'(\d+(?:,\d{3})*(?:\.\d{1,2})?)',
+    ).firstMatch(value);
+
+    if (match == null) {
+      return null;
+    }
+
+    return double.tryParse(
+      match
+          .group(1)!
+          .replaceAll(',', ''),
+    );
+  }
+
+  // ================================================================
+  // FALLBACK CATEGORY
+  // ================================================================
+
+  static ExpenseCategory _categoryFor(
+    String title,
+  ) {
+    final text =
+        title.toLowerCase();
 
     if (RegExp(
-      r'food|milk|bread|rice|vegetable|fruit|'
-      r'grocery|coffee|tea|meal|pizza|burger|'
-      r'snack|restaurant|dosa|paneer|jamun',
+      r'food|milk|bread|rice|vegetable|'
+      r'fruit|grocery|coffee|tea|meal|'
+      r'pizza|burger|snack|restaurant|'
+      r'dosa|paneer|jamun',
     ).hasMatch(text)) {
       return ExpenseCategory.food;
     }
@@ -1067,7 +1563,9 @@ class ReceiptOcrService {
       return ExpenseCategory.utilities;
     }
 
-    if (RegExp(r'movie|cinema|game|netflix|spotify|concert').hasMatch(text)) {
+    if (RegExp(
+      r'movie|cinema|game|netflix|spotify|concert',
+    ).hasMatch(text)) {
       return ExpenseCategory.entertainment;
     }
 
