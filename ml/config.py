@@ -9,6 +9,10 @@ ML_DIR = Path(__file__).resolve().parent
 
 DATASET_PATH = ML_DIR / "dataset" / "transactions.csv"
 
+SUPPLEMENTARY_DATASET_PATH = (
+    ML_DIR / "dataset" / "supplementary_transactions.csv"
+)
+
 
 # ---------------------------------------------------------
 # SpendSense expense categories

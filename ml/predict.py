@@ -1,13 +1,25 @@
+from pathlib import Path
 import sys
+
 import joblib
+
+
+# ---------------------------------------------------------
+# Project paths
+# ---------------------------------------------------------
+
+ML_DIR = Path(__file__).resolve().parent
+
+MODEL_PATH = ML_DIR / "expense_model.pkl"
+VECTORIZER_PATH = ML_DIR / "tfidf_vectorizer.pkl"
 
 
 # ---------------------------------------------------------
 # Load trained model and TF-IDF vectorizer
 # ---------------------------------------------------------
 
-model = joblib.load("ml/expense_model.pkl")
-vectorizer = joblib.load("ml/tfidf_vectorizer.pkl")
+model = joblib.load(MODEL_PATH)
+vectorizer = joblib.load(VECTORIZER_PATH)
 
 
 # ---------------------------------------------------------
@@ -16,14 +28,15 @@ vectorizer = joblib.load("ml/tfidf_vectorizer.pkl")
 
 if len(sys.argv) < 2:
     print("Please provide a transaction description.")
-    print('Example: python ml/predict.py "pizza hut"')
+    print('Example: python predict.py "pizza hut"')
     sys.exit(1)
+
 
 description = " ".join(sys.argv[1:])
 
 
 # ---------------------------------------------------------
-# Convert description into TF-IDF features
+# Convert description to TF-IDF
 # ---------------------------------------------------------
 
 description_tfidf = vectorizer.transform([description])
@@ -35,12 +48,8 @@ description_tfidf = vectorizer.transform([description])
 
 prediction = model.predict(description_tfidf)[0]
 
-
-# ---------------------------------------------------------
-# Calculate prediction confidence
-# ---------------------------------------------------------
-
 probabilities = model.predict_proba(description_tfidf)[0]
+
 confidence = max(probabilities)
 
 
