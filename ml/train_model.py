@@ -1,45 +1,91 @@
+from pathlib import Path
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
 import joblib
 
-from preprocess import load_and_prepare_data
+from preprocess import load_original_data, load_supplementary_data
 
 
 # ---------------------------------------------------------
-# Load prepared data
+# Project paths
 # ---------------------------------------------------------
 
-data = load_and_prepare_data()
+ML_DIR = Path(__file__).resolve().parent
 
-descriptions = [row["description"] for row in data]
-categories = [row["category"] for row in data]
+MODEL_PATH = ML_DIR / "expense_model.pkl"
+VECTORIZER_PATH = ML_DIR / "tfidf_vectorizer.pkl"
 
 
 # ---------------------------------------------------------
-# Split data into training and testing sets
+# Load original and supplementary data
+# ---------------------------------------------------------
+
+original_data = load_original_data()
+supplementary_data = load_supplementary_data()
+
+original_descriptions = [
+    row["description"]
+    for row in original_data
+]
+
+original_categories = [
+    row["category"]
+    for row in original_data
+]
+
+supplementary_descriptions = [
+    row["description"]
+    for row in supplementary_data
+]
+
+supplementary_categories = [
+    row["category"]
+    for row in supplementary_data
+]
+
+print("Original dataset:", len(original_data))
+print("Supplementary examples:", len(supplementary_data))
+
+
+# ---------------------------------------------------------
+# Split original data into training and testing sets
 # ---------------------------------------------------------
 
 X_train, X_test, y_train, y_test = train_test_split(
-    descriptions,
-    categories,
+    original_descriptions,
+    original_categories,
     test_size=0.20,
     random_state=42,
-    stratify=categories,
+    stratify=original_categories,
 )
 
-print("Train/test split completed successfully.")
-print(f"Total transactions: {len(data)}")
-print(f"Training transactions: {len(X_train)}")
-print(f"Testing transactions: {len(X_test)}")
+print("\nOriginal train/test split completed.")
+print(f"Original training transactions: {len(X_train)}")
+print(f"Original testing transactions: {len(X_test)}")
+
+
+# ---------------------------------------------------------
+# Add supplementary examples only to training data
+# ---------------------------------------------------------
+
+X_train = X_train + supplementary_descriptions
+y_train = y_train + supplementary_categories
+
+print("\nSupplementary examples added to training data.")
+print(f"Final training transactions: {len(X_train)}")
+print(f"Final testing transactions: {len(X_test)}")
 
 
 # ---------------------------------------------------------
 # Create TF-IDF features
 # ---------------------------------------------------------
 
-vectorizer = TfidfVectorizer()
+vectorizer = TfidfVectorizer(
+    ngram_range=(1, 2),
+)
 
 X_train_tfidf = vectorizer.fit_transform(X_train)
 X_test_tfidf = vectorizer.transform(X_test)
@@ -57,11 +103,12 @@ print(
 
 model = LogisticRegression(
     max_iter=1000,
+    class_weight="balanced",
 )
 
 model.fit(X_train_tfidf, y_train)
 
-print("\nModel training completed successfully.")
+print("\nImproved model training completed successfully.")
 
 
 # ---------------------------------------------------------
@@ -72,13 +119,20 @@ y_pred = model.predict(X_test_tfidf)
 
 accuracy = accuracy_score(y_test, y_pred)
 
-print("\nModel Evaluation")
-print("----------------")
+print("\nImproved Model Evaluation")
+print("-------------------------")
 print(f"Accuracy: {accuracy * 100:.2f}%")
 
 print("\nClassification Report")
 print("---------------------")
-print(classification_report(y_test, y_pred, zero_division=0))
+
+print(
+    classification_report(
+        y_test,
+        y_pred,
+        zero_division=0,
+    )
+)
 
 
 # ---------------------------------------------------------
@@ -107,12 +161,12 @@ print(f"Total mistakes: {mistakes}")
 
 
 # ---------------------------------------------------------
-# Save trained model and TF-IDF vectorizer
+# Save final model and TF-IDF vectorizer
 # ---------------------------------------------------------
 
-joblib.dump(model, "ml/expense_model.pkl")
-joblib.dump(vectorizer, "ml/tfidf_vectorizer.pkl")
+joblib.dump(model, MODEL_PATH)
+joblib.dump(vectorizer, VECTORIZER_PATH)
 
-print("\nModel files saved successfully.")
-print("Saved: ml/expense_model.pkl")
-print("Saved: ml/tfidf_vectorizer.pkl")
+print("\nFinal model files saved successfully.")
+print(f"Saved: {MODEL_PATH}")
+print(f"Saved: {VECTORIZER_PATH}")
