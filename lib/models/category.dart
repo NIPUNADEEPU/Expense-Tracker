@@ -8,7 +8,9 @@ enum ExpenseCategory {
   utilities,
   entertainment,
   shopping,
-  other;
+  other,
+  uncategorized,
+  personal;
 
   String get displayName {
     switch (this) {
@@ -28,6 +30,10 @@ enum ExpenseCategory {
         return 'Shopping';
       case ExpenseCategory.other:
         return 'Other';
+      case ExpenseCategory.uncategorized:
+        return 'Uncategorized';
+      case ExpenseCategory.personal:
+        return 'Personal';
     }
   }
 
@@ -49,6 +55,10 @@ enum ExpenseCategory {
         return Icons.shopping_bag_rounded;
       case ExpenseCategory.other:
         return Icons.more_horiz_rounded;
+      case ExpenseCategory.uncategorized:
+        return Icons.help_outline_rounded;
+      case ExpenseCategory.personal:
+        return Icons.people_alt_outlined;
     }
   }
 
@@ -70,6 +80,10 @@ enum ExpenseCategory {
         return const Color(0xFFEC4899); // Pink
       case ExpenseCategory.other:
         return const Color(0xFF6B7280); // Slate / Grey
+      case ExpenseCategory.uncategorized:
+        return const Color(0xFF9CA3AF);
+      case ExpenseCategory.personal:
+        return const Color(0xFF06B6D4);
     }
   }
 }

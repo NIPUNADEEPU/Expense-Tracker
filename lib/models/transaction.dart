@@ -4,7 +4,8 @@ enum TransactionType {
   income,
   expense;
 
-  String get displayName => this == TransactionType.income ? 'Income' : 'Expense';
+  String get displayName =>
+      this == TransactionType.income ? 'Income' : 'Expense';
 }
 
 class Transaction {

@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import '../models/transaction.dart';
 import '../models/category.dart';
+import '../models/transaction_analytics.dart';
 import '../services/notification_service.dart';
 
 class ExpenseProvider with ChangeNotifier {
@@ -15,6 +16,11 @@ class ExpenseProvider with ChangeNotifier {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
   _firestoreSubscription;
   String? _currentUserId;
+  bool _isLoadingTransactions = true;
+  String? _transactionLoadError;
+
+  bool get isLoadingTransactions => _isLoadingTransactions;
+  String? get transactionLoadError => _transactionLoadError;
 
   ExpenseProvider() {
     _listenToAuthChanges();
@@ -23,6 +29,14 @@ class ExpenseProvider with ChangeNotifier {
   void _listenToAuthChanges() {
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
+        // Avoid briefly exposing the prior account's cached transactions while
+        // the new user's Firestore stream is establishing its first snapshot.
+        if (_currentUserId != user.uid) {
+          _transactions.clear();
+          _isLoadingTransactions = true;
+          _transactionLoadError = null;
+          notifyListeners();
+        }
         _currentUserId = user.uid;
         _subscribeToTransactions(user.uid);
         if (!kIsWeb) {
@@ -32,6 +46,8 @@ class ExpenseProvider with ChangeNotifier {
         _currentUserId = null;
         _unsubscribeFromTransactions();
         _transactions.clear();
+        _isLoadingTransactions = false;
+        _transactionLoadError = null;
         notifyListeners();
       }
     });
@@ -46,6 +62,7 @@ class ExpenseProvider with ChangeNotifier {
         .snapshots()
         .listen(
           (snapshot) {
+            if (_currentUserId != uid) return;
             final transactions = <Transaction>[];
 
             for (final document in snapshot.docs) {
@@ -61,10 +78,15 @@ class ExpenseProvider with ChangeNotifier {
             _transactions
               ..clear()
               ..addAll(transactions);
+            _isLoadingTransactions = false;
+            _transactionLoadError = null;
             notifyListeners();
           },
           onError: (error) {
             debugPrint('Firestore listen error: $error');
+            _isLoadingTransactions = false;
+            _transactionLoadError = 'Could not load your transactions.';
+            notifyListeners();
           },
         );
   }
@@ -93,15 +115,17 @@ class ExpenseProvider with ChangeNotifier {
   }
 
   double get totalIncome {
-    return _transactions
-        .where((t) => t.type == TransactionType.income)
-        .fold(0.0, (total, t) => total + t.amount);
+    return TransactionAnalytics.total(
+      _transactions,
+      type: TransactionType.income,
+    );
   }
 
   double get totalExpenses {
-    return _transactions
-        .where((t) => t.type == TransactionType.expense)
-        .fold(0.0, (total, t) => total + t.amount);
+    return TransactionAnalytics.total(
+      _transactions,
+      type: TransactionType.expense,
+    );
   }
 
   double get totalBalance {
@@ -109,17 +133,10 @@ class ExpenseProvider with ChangeNotifier {
   }
 
   Map<ExpenseCategory, double> get categoryTotals {
-    final Map<ExpenseCategory, double> totals = {};
-    for (var transaction in _transactions) {
-      if (transaction.type == TransactionType.expense) {
-        totals[transaction.category] =
-            (totals[transaction.category] ?? 0.0) + transaction.amount;
-      }
-    }
-    return totals;
+    return TransactionAnalytics.spendingByCategory(_transactions);
   }
 
-  void addTransaction({
+  Future<void> addTransaction({
     required String title,
     required double amount,
     required TransactionType type,
@@ -127,7 +144,7 @@ class ExpenseProvider with ChangeNotifier {
     required DateTime date,
   }) {
     final uid = _currentUserId;
-    if (uid == null) return;
+    if (uid == null) return Future<void>.value();
 
     final id = _uuid.v4();
     final newTransaction = Transaction(
@@ -139,7 +156,7 @@ class ExpenseProvider with ChangeNotifier {
       date: date,
     );
 
-    unawaited(_writeTransaction(uid, id, newTransaction));
+    return _writeTransaction(uid, id, newTransaction);
   }
 
   Future<void> addTransactions({

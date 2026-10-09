@@ -3,25 +3,25 @@ import 'package:intl/intl.dart';
 import '../models/transaction.dart';
 
 class TransactionTile extends StatelessWidget {
-  final Transaction transaction;
-  final VoidCallback onDelete;
-  final VoidCallback onEdit;
-
   const TransactionTile({
     super.key,
     required this.transaction,
     required this.onDelete,
     required this.onEdit,
   });
+  final Transaction transaction;
+  final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormatter = NumberFormat.currency(locale: 'en_US', symbol: '\$');
-    final dateFormatter = DateFormat('MMM dd, yyyy');
-    
-    final isIncome = transaction.type == TransactionType.income;
-    final category = transaction.category;
-    
+    final income = transaction.type == TransactionType.income;
+    final color = income ? const Color(0xFF34D399) : const Color(0xFFF87171);
+    final amount = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    ).format(transaction.amount);
     return Dismissible(
       key: Key(transaction.id),
       direction: DismissDirection.endToStart,
@@ -29,101 +29,100 @@ class TransactionTile extends StatelessWidget {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.symmetric(vertical: 3),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.error.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(16),
+          color: Theme.of(context).colorScheme.error,
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(
-          Icons.delete_sweep_rounded,
-          color: Colors.white,
-          size: 28,
-        ),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.05),
-            width: 1.0,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Category Icon Badge
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: category.color.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+      child: InkWell(
+        onTap: onEdit,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: transaction.category.color.withValues(alpha: .13),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  transaction.category.icon,
+                  color: transaction.category.color,
+                  size: 20,
+                ),
               ),
-              child: Icon(
-                category.icon,
-                color: category.color,
-                size: 22,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      transaction.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${transaction.category.displayName} · ${DateFormat('d MMM, h:mm a').format(transaction.date)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            
-            // Transaction Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    transaction.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    '${income ? '+' : '−'}$amount',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    category.displayName,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                  PopupMenuButton<String>(
+                    tooltip: 'Transaction actions',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 144),
+                    onSelected: (action) {
+                      if (action == 'edit') onEdit();
+                      if (action == 'delete') onDelete();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Edit'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.delete_outline,
+                            color: Color(0xFFF87171),
+                          ),
+                          title: Text('Delete'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      child: Icon(Icons.more_horiz_rounded, size: 21),
                     ),
                   ),
                 ],
               ),
-            ),
-            
-            // Amount, date, and edit action
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${isIncome ? '+' : '-'}${currencyFormatter.format(transaction.amount)}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isIncome
-                        ? const Color(0xFF10B981) // Emerald Green for income
-                        : Theme.of(context).colorScheme.error, // Red for expense
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  dateFormatter.format(transaction.date),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.4),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit_rounded, size: 19),
-                  tooltip: 'Edit transaction',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onEdit,
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
