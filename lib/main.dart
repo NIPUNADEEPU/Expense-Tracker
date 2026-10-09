@@ -1,31 +1,25 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'firebase_options.dart';
 import 'providers/expense_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
 
 void main() async {
-  // Ensure status bar styling is transparent & matches theme
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // Firebase Messaging's native setup (including topic subscriptions) is not
-  // available when the app is launched in a browser. Do not let it block the
-  // first Flutter frame on web.
-  if (!kIsWeb) {
-    await NotificationService.initialize();
-  }
+  if (!kIsWeb) await NotificationService.initialize();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: Color(0xFF0F0F12),
-      systemNavigationBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFFFBF8F4),
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
 
@@ -36,120 +30,173 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Inject the ExpenseProvider state notifier at the root of the app
-    return ExpenseScope(
-      notifier: ExpenseProvider(),
-      child: MaterialApp(
-        scaffoldMessengerKey: NotificationService.scaffoldMessengerKey,
-        title: 'Expense Tracker',
-        debugShowCheckedModeBanner: false,
-        themeMode: ThemeMode.dark, // Default to premium dark mode
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(
-            0xFF0F0F12,
-          ), // Premium deep pitch charcoal
-          cardColor: const Color(
-            0xFF191920,
-          ), // Slightly lighter charcoal for cards
-          dividerColor: const Color(0xFF2E2E38),
-
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xFF8B5CF6), // Indigo / Violet primary
-            onPrimary: Colors.white,
-            secondary: Color(0xFF10B981), // Emerald accent
-            onSecondary: Colors.white,
-            surface: Color(0xFF191920),
-            onSurface: Color(0xFFF3F4F6),
-            error: Color(0xFFEF4444), // Rose red for expense/errors
-            onError: Colors.white,
+  Widget build(BuildContext context) => ExpenseScope(
+    notifier: ExpenseProvider(),
+    child: MaterialApp(
+      scaffoldMessengerKey: NotificationService.scaffoldMessengerKey,
+      title: 'SpendSense',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFFBF8F4),
+        cardColor: Colors.white,
+        dividerColor: const Color(0xFFEDE5DD),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFFF0542A),
+          onPrimary: Colors.white,
+          secondary: Color(0xFF0FA878),
+          onSecondary: Colors.white,
+          surface: Colors.white,
+          onSurface: Color(0xFF28231F),
+          error: Color(0xFFE5483F),
+          onError: Colors.white,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFFBF8F4),
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF28231F),
           ),
-
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF0F0F12),
-            elevation: 0,
-            centerTitle: false,
-            titleTextStyle: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFF3F4F6),
-            ),
-            iconTheme: IconThemeData(color: Color(0xFFF3F4F6)),
+          iconTheme: IconThemeData(color: Color(0xFF28231F)),
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFEDE5DD)),
           ),
-
-          segmentedButtonTheme: SegmentedButtonThemeData(
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith<Color?>((
-                states,
-              ) {
-                if (states.contains(WidgetState.selected)) {
-                  return const Color(0xFF8B5CF6);
-                }
-                return const Color(0xFF191920);
-              }),
-              foregroundColor: WidgetStateProperty.resolveWith<Color?>((
-                states,
-              ) {
-                if (states.contains(WidgetState.selected)) {
-                  return Colors.white;
-                }
-                return Colors.white70;
-              }),
-              side: const WidgetStatePropertyAll(BorderSide.none),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 15,
+            vertical: 15,
           ),
-
-          chipTheme: ChipThemeData(
-            backgroundColor: const Color(0xFF191920),
-            disabledColor: Colors.grey,
-            selectedColor: const Color(0xFF8B5CF6),
-            secondarySelectedColor: const Color(0xFF8B5CF6),
-            labelStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.white70,
-            ),
-            secondaryLabelStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-            brightness: Brightness.dark,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFEDE5DD)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFEDE5DD)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFF0542A), width: 1.5),
+          ),
+          labelStyle: const TextStyle(color: Color(0xFF80766F)),
+          hintStyle: const TextStyle(color: Color(0xFFAAA19A)),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFF0542A),
+            foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.transparent),
+              borderRadius: BorderRadius.circular(11),
             ),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
-
-          textTheme: const TextTheme(
-            titleLarge: TextStyle(
-              fontFamily: 'Roboto',
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFF3F4F6),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFF0542A),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
             ),
-            titleMedium: TextStyle(
-              fontFamily: 'Roboto',
-              fontWeight: FontWeight.w600,
-              color: Color(0xFFF3F4F6),
-            ),
-            bodyLarge: TextStyle(
-              fontFamily: 'Roboto',
-              color: Color(0xFFE5E7EB),
-            ),
-            bodyMedium: TextStyle(
-              fontFamily: 'Roboto',
-              color: Color(0xFF9CA3AF),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF544A43),
+            side: const BorderSide(color: Color(0xFFE2D8CF)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
             ),
           ),
         ),
-        home: const SplashScreen(),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.white,
+          indicatorColor: const Color(0xFFFFE9E1),
+          elevation: 0,
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? const Color(0xFFF0542A)
+                  : const Color(0xFF8C827B),
+            );
+          }),
+        ),
+        segmentedButtonTheme: SegmentedButtonThemeData(
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              return states.contains(WidgetState.selected)
+                  ? const Color(0xFFF0542A)
+                  : const Color(0xFFF2ECE6);
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              return states.contains(WidgetState.selected)
+                  ? Colors.white
+                  : const Color(0xFF625951);
+            }),
+            side: const WidgetStatePropertyAll(BorderSide.none),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: const Color(0xFFF2ECE6),
+          disabledColor: const Color(0xFFEDE5DD),
+          selectedColor: const Color(0xFFF0542A),
+          secondarySelectedColor: const Color(0xFFF0542A),
+          labelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF625951),
+          ),
+          secondaryLabelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+          brightness: Brightness.light,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide.none,
+          ),
+        ),
+        textTheme: const TextTheme(
+          headlineSmall: TextStyle(
+            color: Color(0xFF28231F),
+            fontWeight: FontWeight.w700,
+          ),
+          titleLarge: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF28231F),
+          ),
+          titleMedium: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF28231F),
+          ),
+          bodyLarge: TextStyle(color: Color(0xFF3E3731)),
+          bodyMedium: TextStyle(color: Color(0xFF80766F)),
+          bodySmall: TextStyle(color: Color(0xFF8C827B)),
+        ),
       ),
-    );
-  }
+      home: const SplashScreen(),
+    ),
+  );
 }

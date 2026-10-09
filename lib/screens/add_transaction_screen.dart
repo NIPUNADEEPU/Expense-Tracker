@@ -479,7 +479,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.storefront_outlined, color: Color(0xFF8B5CF6)),
+            Icon(Icons.storefront_outlined, color: theme.colorScheme.primary),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

@@ -113,8 +113,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F12),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -123,7 +124,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 const CircleAvatar(
                   radius: 45,
-                  backgroundColor: Color(0xFF8B5CF6),
+                  backgroundColor: Color(0xFFF0542A),
                   child: Icon(Icons.person_add, color: Colors.white, size: 45),
                 ),
 
@@ -132,7 +133,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const Text(
                   "Create Account",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFF28231F),
                     fontSize: 30,
                     fontWeight: FontWeight.bold,
                   ),
@@ -143,20 +144,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Text(
                   "Create your SpendSense account",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                  style: TextStyle(color: Color(0xFF80766F), fontSize: 16),
                 ),
 
                 const SizedBox(height: 40),
 
                 TextField(
                   controller: _nameController,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Color(0xFF28231F)),
                   decoration: InputDecoration(
                     hintText: "Full Name",
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.person, color: Colors.grey),
+                    hintStyle: const TextStyle(color: Color(0xFF8C827B)),
+                    prefixIcon: const Icon(
+                      Icons.person,
+                      color: Color(0xFF8C827B),
+                    ),
                     filled: true,
-                    fillColor: const Color(0xFF1A1A1F),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none,
@@ -169,13 +173,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Color(0xFF28231F)),
                   decoration: InputDecoration(
                     hintText: "Email",
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.email, color: Colors.grey),
+                    hintStyle: const TextStyle(color: Color(0xFF8C827B)),
+                    prefixIcon: const Icon(
+                      Icons.email,
+                      color: Color(0xFF8C827B),
+                    ),
                     filled: true,
-                    fillColor: const Color(0xFF1A1A1F),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none,
@@ -188,17 +195,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Color(0xFF28231F)),
                   decoration: InputDecoration(
                     hintText: "Password",
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.lock, color: Colors.grey),
+                    hintStyle: const TextStyle(color: Color(0xFF8C827B)),
+                    prefixIcon: const Icon(
+                      Icons.lock,
+                      color: Color(0xFF8C827B),
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
                             ? Icons.visibility_off
                             : Icons.visibility,
-                        color: Colors.grey,
+                        color: Color(0xFF8C827B),
                       ),
                       onPressed: () {
                         setState(() {
@@ -207,7 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF1A1A1F),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none,
@@ -220,20 +230,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextField(
                   controller: _confirmPasswordController,
                   obscureText: _obscureConfirmPassword,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Color(0xFF28231F)),
                   decoration: InputDecoration(
                     hintText: "Confirm Password",
-                    hintStyle: const TextStyle(color: Colors.grey),
+                    hintStyle: const TextStyle(color: Color(0xFF8C827B)),
                     prefixIcon: const Icon(
                       Icons.lock_outline,
-                      color: Colors.grey,
+                      color: Color(0xFF8C827B),
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword
                             ? Icons.visibility_off
                             : Icons.visibility,
-                        color: Colors.grey,
+                        color: Color(0xFF8C827B),
                       ),
                       onPressed: () {
                         setState(() {
@@ -242,7 +252,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF1A1A1F),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                       borderSide: BorderSide.none,
@@ -257,7 +267,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   height: 55,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B5CF6),
+                      backgroundColor: const Color(0xFFF0542A),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15),
                       ),
@@ -282,7 +292,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         },
                   child: const Text(
                     "Already have an account? Login",
-                    style: TextStyle(color: Color(0xFF8B5CF6), fontSize: 16),
+                    style: TextStyle(color: Color(0xFFF0542A), fontSize: 16),
                   ),
                 ),
               ],

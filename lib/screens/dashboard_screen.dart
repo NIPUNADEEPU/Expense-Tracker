@@ -287,17 +287,20 @@ class HomeDashboard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF211A30),
-                        borderRadius: BorderRadius.circular(22),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFEDE5DD)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Total balance · all time',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: .7),
-                            ),
+                            'AVAILABLE BALANCE',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  letterSpacing: 1,
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -305,7 +308,7 @@ class HomeDashboard extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: Color(0xFF28231F),
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -332,8 +335,8 @@ class HomeDashboard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerLeft,
+                    SizedBox(
+                      width: double.infinity,
                       child: FilledButton.icon(
                         onPressed: onAdd,
                         icon: const Icon(Icons.add_rounded),
@@ -353,57 +356,86 @@ class HomeDashboard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (topCategories.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'No spending recorded this month.',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              'Add your first transaction to start tracking.',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ...topCategories
-                          .take(4)
-                          .map(
-                            (e) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 9),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: e.key.color.withValues(alpha: .14),
-                                      borderRadius: BorderRadius.circular(11),
-                                    ),
-                                    child: Icon(
-                                      e.key.icon,
-                                      color: e.key.color,
-                                      size: 18,
-                                    ),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFEDE5DD)),
+                      ),
+                      child: topCategories.isEmpty
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'No spending recorded this month.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  'Add your first transaction to start tracking.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: topCategories.take(4).map((entry) {
+                                final share = expenses == 0
+                                    ? 0.0
+                                    : entry.value / expenses;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(child: Text(e.key.displayName)),
-                                  Text(
-                                    _inr.format(e.value),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            entry.key.icon,
+                                            size: 17,
+                                            color: entry.key.color,
+                                          ),
+                                          const SizedBox(width: 9),
+                                          Expanded(
+                                            child: Text(entry.key.displayName),
+                                          ),
+                                          Text(
+                                            _inr.format(entry.value),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '${(share * 100).round()}%',
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: LinearProgressIndicator(
+                                          value: share.clamp(0, 1),
+                                          minHeight: 5,
+                                          backgroundColor: const Color(
+                                            0xFFF2ECE6,
+                                          ),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                entry.key.color,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                );
+                              }).toList(),
                             ),
-                          ),
+                    ),
                     const SizedBox(height: 28),
                     _SectionHeading(
                       title: 'Recent transactions',
@@ -413,24 +445,35 @@ class HomeDashboard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    if (provider.recentTransactions.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        child: Text(
-                          'No transactions yet. Add your first transaction.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      )
-                    else
-                      ...provider.recentTransactions
-                          .take(4)
-                          .map(
-                            (t) => TransactionTile(
-                              transaction: t,
-                              onEdit: () => _edit(context, t),
-                              onDelete: () => provider.deleteTransaction(t.id),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFEDE5DD)),
+                      ),
+                      child: provider.recentTransactions.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Text(
+                                'No transactions yet. Add your first transaction.',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            )
+                          : Column(
+                              children: provider.recentTransactions
+                                  .take(4)
+                                  .map(
+                                    (t) => TransactionTile(
+                                      transaction: t,
+                                      onEdit: () => _edit(context, t),
+                                      onDelete: () =>
+                                          provider.deleteTransaction(t.id),
+                                    ),
+                                  )
+                                  .toList(),
                             ),
-                          ),
+                    ),
                   ],
                 );
               },
@@ -461,13 +504,7 @@ class _MonthAmount extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: .65),
-          fontSize: 12,
-        ),
-      ),
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 5),
       Text(
         _inr.format(amount),

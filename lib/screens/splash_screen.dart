@@ -11,7 +11,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-
   @override
   void initState() {
     super.initState();
@@ -22,16 +21,12 @@ class _SplashScreenState extends State<SplashScreen> {
       if (user != null) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const DashboardScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
         );
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const LoginScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
         );
       }
     });
@@ -39,8 +34,9 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F12),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -48,7 +44,7 @@ class _SplashScreenState extends State<SplashScreen> {
             const Icon(
               Icons.account_balance_wallet_rounded,
               size: 90,
-              color: Color(0xFF8B5CF6),
+              color: Color(0xFFF0542A),
             ),
 
             const SizedBox(height: 24),
@@ -56,7 +52,7 @@ class _SplashScreenState extends State<SplashScreen> {
             const Text(
               'SpendSense',
               style: TextStyle(
-                color: Colors.white,
+                color: Color(0xFF28231F),
                 fontSize: 30,
                 fontWeight: FontWeight.bold,
               ),
@@ -66,17 +62,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
             Text(
               'Smart spending starts here.',
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 16,
-              ),
+              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 16),
             ),
 
             const SizedBox(height: 50),
 
-            const CircularProgressIndicator(
-              color: Color(0xFF8B5CF6),
-            ),
+            const CircularProgressIndicator(color: Color(0xFFF0542A)),
           ],
         ),
       ),
