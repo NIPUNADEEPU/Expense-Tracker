@@ -1,236 +1,329 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../models/transaction.dart';
+import '../models/transaction_analytics.dart';
 import '../providers/expense_provider.dart';
-import 'ai_insights_screen.dart';
 
 class MonthlyTrendsScreen extends StatefulWidget {
-  const MonthlyTrendsScreen({super.key});
+  const MonthlyTrendsScreen({super.key, required this.onAdd});
+  final VoidCallback onAdd;
 
   @override
   State<MonthlyTrendsScreen> createState() => _MonthlyTrendsScreenState();
 }
 
 class _MonthlyTrendsScreenState extends State<MonthlyTrendsScreen> {
-  int _selectedYear = DateTime.now().year;
+  int _year = DateTime.now().year;
+  int _month = DateTime.now().month;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final transactions = ExpenseScope.of(context).transactions;
-    final years = <int>{DateTime.now().year, ...transactions.map((item) => item.date.year)}
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
-    if (!years.contains(_selectedYear)) _selectedYear = years.first;
+    final provider = ExpenseScope.of(context);
+    final transactions = provider.transactions;
+    final years = <int>{
+      DateTime.now().year,
+      ...transactions.map((transaction) => transaction.date.year),
+    }.toList()..sort((a, b) => b.compareTo(a));
+    if (!years.contains(_year)) _year = years.first;
 
-    final income = List<double>.filled(12, 0);
-    final expenses = List<double>.filled(12, 0);
-    for (final transaction in transactions.where((item) => item.date.year == _selectedYear)) {
-      final totals = transaction.type == TransactionType.income ? income : expenses;
-      totals[transaction.date.month - 1] += transaction.amount;
-    }
-
-    final totalIncome = income.fold(0.0, (sum, value) => sum + value);
-    final totalExpenses = expenses.fold(0.0, (sum, value) => sum + value);
-    final highestExpense = expenses.reduce((a, b) => a > b ? a : b);
-    final highestExpenseMonth = expenses.indexOf(highestExpense);
+    final period = DateTime(_year, _month);
+    final periodLabel = DateFormat('MMMM yyyy').format(period);
+    final isCurrentMonth =
+        _year == DateTime.now().year && _month == DateTime.now().month;
+    final periodTransactions = transactions.where(
+      (transaction) =>
+          transaction.date.year == _year && transaction.date.month == _month,
+    );
+    final hasTransactions = periodTransactions.isNotEmpty;
+    final income = TransactionAnalytics.total(
+      transactions,
+      type: TransactionType.income,
+      year: _year,
+      month: _month,
+    );
+    final expenses = TransactionAnalytics.total(
+      transactions,
+      type: TransactionType.expense,
+      year: _year,
+      month: _month,
+    );
+    final saved = income - expenses;
+    final categories = TransactionAnalytics.spendingByCategory(
+      transactions,
+      year: _year,
+      month: _month,
+    ).entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final previousPeriod = DateTime(_year, _month - 1);
+    final previousExpenses = TransactionAnalytics.total(
+      transactions,
+      type: TransactionType.expense,
+      year: previousPeriod.year,
+      month: previousPeriod.month,
+    );
+    final hasComparison = expenses > 0 && previousExpenses > 0;
+    final spendingChange = hasComparison
+        ? (expenses - previousExpenses) / previousExpenses * 100
+        : 0.0;
+    final currency = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '₹',
+      decimalDigits: 0,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Monthly Trends')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Analytics overview', style: theme.textTheme.titleMedium),
-                DropdownButton<int>(
-                  value: _selectedYear,
-                  underline: const SizedBox(),
-                  items: years
-                      .map((year) => DropdownMenuItem(value: year, child: Text('$year')))
-                      .toList(),
-                  onChanged: (year) {
-                    if (year != null) setState(() => _selectedYear = year);
-                  },
+      appBar: AppBar(title: const Text('Insights')),
+      body: provider.isLoadingTransactions
+          ? const Center(child: CircularProgressIndicator())
+          : provider.transactionLoadError != null
+          ? Center(child: Text(provider.transactionLoadError!))
+          : LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                padding: EdgeInsets.fromLTRB(
+                  constraints.maxWidth > 760 ? 34 : 18,
+                  10,
+                  constraints.maxWidth > 760 ? 34 : 18,
+                  36,
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: _SummaryCard('Income', totalIncome, const Color(0xFF10B981))),
-                const SizedBox(width: 12),
-                Expanded(child: _SummaryCard('Expenses', totalExpenses, theme.colorScheme.error)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _SummaryCard('Net savings', totalIncome - totalExpenses, theme.colorScheme.primary),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Income vs expenses', style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text('Monthly totals for $_selectedYear', style: theme.textTheme.bodyMedium),
-                    const SizedBox(height: 20),
-                    SizedBox(height: 260, child: _MonthlyLineChart(income: income, expenses: expenses)),
-                    const SizedBox(height: 10),
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _Legend(color: Color(0xFF10B981), label: 'Income'),
-                        SizedBox(width: 20),
-                        _Legend(color: Color(0xFFEF4444), label: 'Expenses'),
-                      ],
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Your finances, in perspective',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      DropdownButton<int>(
+                        value: _month,
+                        underline: const SizedBox(),
+                        items: List.generate(
+                          12,
+                          (index) => DropdownMenuItem<int>(
+                            value: index + 1,
+                            child: Text(
+                              DateFormat(
+                                'MMMM',
+                              ).format(DateTime(2020, index + 1)),
+                            ),
+                          ),
+                        ),
+                        onChanged: (month) {
+                          if (month != null) setState(() => _month = month);
+                        },
+                      ),
+                      const SizedBox(width: 5),
+                      DropdownButton<int>(
+                        value: _year,
+                        underline: const SizedBox(),
+                        items: years
+                            .map(
+                              (year) => DropdownMenuItem<int>(
+                                value: year,
+                                child: Text('$year'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (year) {
+                          if (year != null) setState(() => _year = year);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isCurrentMonth ? 'THIS MONTH' : periodLabel.toUpperCase(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.primary,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _Metric(
+                          'Income',
+                          income,
+                          const Color(0xFF34D399),
+                          currency,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _Metric(
+                          'Expenses',
+                          expenses,
+                          const Color(0xFFF87171),
+                          currency,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _Metric(
+                          'Saved',
+                          saved,
+                          theme.colorScheme.primary,
+                          currency,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (!hasTransactions) ...[
+                    const SizedBox(height: 30),
+                    Text(
+                      isCurrentMonth
+                          ? 'No transactions this month.'
+                          : 'No transactions in $periodLabel.',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Add a transaction to start tracking your finances.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 18),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                        onPressed: widget.onAdd,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Add transaction'),
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 28),
+                    Text(
+                      'TOP SPENDING CATEGORIES',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (categories.isEmpty)
+                      Text(
+                        'No spending data for $periodLabel.',
+                        style: theme.textTheme.bodyMedium,
+                      )
+                    else
+                      ...categories.map(
+                        (category) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          child: Row(
+                            children: [
+                              Icon(
+                                category.key.icon,
+                                size: 19,
+                                color: category.key.color,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text(category.key.displayName)),
+                              Text(
+                                currency.format(category.value),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 26),
+                    if (categories.isNotEmpty || hasComparison) ...[
+                      Text(
+                        'SMART INSIGHTS ✨',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (categories.isNotEmpty)
+                        _Insight(
+                          icon: categories.first.key.icon,
+                          color: categories.first.key.color,
+                          text:
+                              '${categories.first.key.displayName} is your highest spending category in $periodLabel.',
+                        ),
+                      if (hasComparison)
+                        _Insight(
+                          icon: spendingChange >= 0
+                              ? Icons.trending_up_rounded
+                              : Icons.trending_down_rounded,
+                          color: spendingChange >= 0
+                              ? const Color(0xFFF87171)
+                              : const Color(0xFF34D399),
+                          text:
+                              'You spent ${currency.format(expenses)} in $periodLabel, compared with ${currency.format(previousExpenses)} in ${DateFormat('MMMM yyyy').format(previousPeriod)}.',
+                        ),
+                    ],
                   ],
-                ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: ListTile(
-                leading: Icon(Icons.insights_rounded, color: theme.colorScheme.primary),
-                title: const Text('Highest spending month'),
-                subtitle: Text(_monthLabel(highestExpenseMonth)),
-                trailing: Text(
-                  '\$${highestExpense.toStringAsFixed(2)}',
-                  style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AiInsightsScreen()),
-                );
-              },
-              icon: const Icon(Icons.auto_awesome_rounded),
-              label: const Text('View AI Insights'),
-              style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
 
-class _MonthlyLineChart extends StatelessWidget {
-  final List<double> income;
-  final List<double> expenses;
-
-  const _MonthlyLineChart({required this.income, required this.expenses});
-
-  @override
-  Widget build(BuildContext context) {
-    final maxValue = [...income, ...expenses].fold(0.0, (max, value) => value > max ? value : max);
-    final chartMax = maxValue == 0 ? 100.0 : maxValue * 1.2;
-    return LineChart(
-      LineChartData(
-        minX: 0,
-        maxX: 11,
-        minY: 0,
-        maxY: chartMax,
-        gridData: FlGridData(show: true, drawVerticalLine: false),
-        borderData: FlBorderData(show: false),
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 42,
-              interval: chartMax / 4,
-              getTitlesWidget: (value, meta) => Text(
-                value >= 1000 ? '\$${(value / 1000).toStringAsFixed(1)}k' : '\$${value.toStringAsFixed(0)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 28,
-              interval: 1,
-              getTitlesWidget: (value, meta) {
-                if (value < 0 || value > 11 || value != value.roundToDouble()) return const SizedBox();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_monthLabel(value.toInt()).substring(0, 1), style: Theme.of(context).textTheme.bodySmall),
-                );
-              },
-            ),
-          ),
-        ),
-        lineBarsData: [
-          _line(income, const Color(0xFF10B981)),
-          _line(expenses, const Color(0xFFEF4444)),
-        ],
-      ),
-    );
-  }
-
-  LineChartBarData _line(List<double> values, Color color) => LineChartBarData(
-        spots: List.generate(12, (index) => FlSpot(index.toDouble(), values[index])),
-        isCurved: true,
-        color: color,
-        barWidth: 3,
-        dotData: const FlDotData(show: false),
-        belowBarData: BarAreaData(show: false),
-      );
-}
-
-class _SummaryCard extends StatelessWidget {
+class _Metric extends StatelessWidget {
+  const _Metric(this.label, this.value, this.color, this.format);
   final String label;
   final double value;
   final Color color;
-
-  const _SummaryCard(this.label, this.value, this.color);
+  final NumberFormat format;
 
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 6),
-              Text('\$${value.toStringAsFixed(2)}', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
-            ],
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(13),
+    decoration: BoxDecoration(
+      color: Theme.of(context).cardColor,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 7),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            format.format(value),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
           ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
-class _Legend extends StatelessWidget {
+class _Insight extends StatelessWidget {
+  const _Insight({required this.icon, required this.color, required this.text});
+  final IconData icon;
   final Color color;
-  final String label;
-
-  const _Legend({required this.color, required this.label});
+  final String text;
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
-          Text(label),
-        ],
-      );
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 19),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+      ],
+    ),
+  );
 }
-
-String _monthLabel(int monthIndex) => const [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ][monthIndex];

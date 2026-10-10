@@ -142,15 +142,11 @@ class Transaction {
     );
   }
 
-  // Supports both the new ML categories and old categories
-  // that may already exist in Firebase.
+  // Supports current categories and legacy stored category names.
   static ExpenseCategory _categoryFromStoredName(String value) {
     switch (value) {
-      // Income
       case 'salary':
         return ExpenseCategory.salary;
-
-      // Current ML categories
       case 'food':
         return ExpenseCategory.food;
       case 'travel':
@@ -167,19 +163,17 @@ class Transaction {
         return ExpenseCategory.personalCare;
       case 'financial':
         return ExpenseCategory.financial;
-
-      // Old categories
       case 'transport':
-        return ExpenseCategory.travel;
+        return ExpenseCategory.transport;
       case 'rent':
-        return ExpenseCategory.home;
+        return ExpenseCategory.rent;
       case 'utilities':
-        return ExpenseCategory.bills;
-
-      // Legacy fallback
+        return ExpenseCategory.utilities;
+      case 'personal':
+        return ExpenseCategory.personal;
+      case 'uncategorized':
+        return ExpenseCategory.uncategorized;
       case 'other':
-        return ExpenseCategory.other;
-
       default:
         return ExpenseCategory.other;
     }

@@ -1,332 +1,459 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../models/category.dart';
 import '../models/transaction.dart';
+import '../models/transaction_analytics.dart';
 import '../providers/expense_provider.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
-
+  const HistoryScreen({super.key, this.onAdd});
+  final VoidCallback? onAdd;
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  String _searchQuery = '';
-  TransactionType? _selectedTypeFilter;
-  ExpenseCategory? _selectedCategoryFilter;
-  DateTimeRange? _selectedDateRange;
+  final _search = TextEditingController();
+  TransactionType? _type;
+  ExpenseCategory? _category;
+  DateTimeRange? _range;
+  bool _ascending = false;
 
-  Future<void> _pickDateRange() async {
-    final now = DateTime.now();
-    final range = await showDateRangePicker(
+  bool _categoryMatchesType(ExpenseCategory category, TransactionType? type) {
+    if (type == TransactionType.income) {
+      return category == ExpenseCategory.salary ||
+          category == ExpenseCategory.other;
+    }
+    if (type == TransactionType.expense) {
+      return category != ExpenseCategory.salary;
+    }
+    return true;
+  }
+
+  void _selectType(TransactionType? type) {
+    setState(() {
+      _type = type;
+      if (_category != null && !_categoryMatchesType(_category!, type)) {
+        _category = null;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _filters() async {
+    var type = _type;
+    var category = _category;
+    var range = _range;
+    await showModalBottomSheet<void>(
       context: context,
-      initialDateRange: _selectedDateRange,
-      firstDate: DateTime(now.year - 5),
-      lastDate: now,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Filter transactions',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 18),
+                const Text('Type'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: type == null,
+                      onSelected: (_) => setSheetState(() => type = null),
+                    ),
+                    ...TransactionType.values.map(
+                      (v) => FilterChip(
+                        label: Text(v.displayName),
+                        selected: type == v,
+                        onSelected: (_) => setSheetState(() {
+                          type = type == v ? null : v;
+                          if (category != null &&
+                              !_categoryMatchesType(category!, type)) {
+                            category = null;
+                          }
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Text('Category'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<ExpenseCategory?>(
+                  initialValue: category,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    labelText: 'Any category',
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Any category'),
+                    ),
+                    ...ExpenseCategory.values
+                        .where(
+                          (c) => type == TransactionType.income
+                              ? c == ExpenseCategory.salary ||
+                                    c == ExpenseCategory.other
+                              : type == TransactionType.expense
+                              ? c != ExpenseCategory.salary
+                              : true,
+                        )
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(c.displayName),
+                          ),
+                        ),
+                  ],
+                  onChanged: (v) => setSheetState(() => category = v),
+                ),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final now = DateTime.now();
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(now.year - 5),
+                      lastDate: now,
+                      initialDateRange: range,
+                    );
+                    if (picked != null) setSheetState(() => range = picked);
+                  },
+                  icon: const Icon(Icons.date_range),
+                  label: Text(
+                    range == null
+                        ? 'Any date'
+                        : '${DateFormat('d MMM y').format(range!.start)} – ${DateFormat('d MMM y').format(range!.end)}',
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _type = null;
+                          _category = null;
+                          _range = null;
+                        });
+                        Navigator.pop(sheetContext);
+                      },
+                      child: const Text('Reset'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () {
+                        setState(() {
+                          _type = type;
+                          _category = category;
+                          _range = range;
+                        });
+                        Navigator.pop(sheetContext);
+                      },
+                      child: const Text('Apply filters'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
-    if (range != null) setState(() => _selectedDateRange = range);
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = ExpenseScope.of(context);
     final theme = Theme.of(context);
-
-    // Apply filtering logic
-    final filteredTransactions = provider.transactions.where((t) {
-      final matchesSearch = t.title.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesType = _selectedTypeFilter == null || t.type == _selectedTypeFilter;
-      final matchesCategory = _selectedCategoryFilter == null || t.category == _selectedCategoryFilter;
-      final matchesDate = _selectedDateRange == null ||
-          (!t.date.isBefore(_selectedDateRange!.start) &&
-              !t.date.isAfter(DateTime(
-                _selectedDateRange!.end.year,
-                _selectedDateRange!.end.month,
-                _selectedDateRange!.end.day,
-                23,
-                59,
-                59,
-              )));
-      return matchesSearch && matchesType && matchesCategory && matchesDate;
-    }).toList();
-    final reportIncome = filteredTransactions
-        .where((transaction) => transaction.type == TransactionType.income)
-        .fold(0.0, (sum, transaction) => sum + transaction.amount);
-    final reportExpenses = filteredTransactions
-        .where((transaction) => transaction.type == TransactionType.expense)
-        .fold(0.0, (sum, transaction) => sum + transaction.amount);
-
+    final items =
+        provider.transactions.where((t) {
+          final matchesText = t.title.toLowerCase().contains(
+            _search.text.toLowerCase(),
+          );
+          final matchesDate =
+              _range == null ||
+              (!t.date.isBefore(_range!.start) &&
+                  !t.date.isAfter(
+                    DateTime(
+                      _range!.end.year,
+                      _range!.end.month,
+                      _range!.end.day,
+                      23,
+                      59,
+                      59,
+                    ),
+                  ));
+          return matchesText &&
+              (_type == null || t.type == _type) &&
+              (_category == null || t.category == _category) &&
+              matchesDate;
+        }).toList()..sort(
+          (a, b) =>
+              _ascending ? a.date.compareTo(b.date) : b.date.compareTo(a.date),
+        );
+    final income = TransactionAnalytics.total(
+      items,
+      type: TransactionType.income,
+    );
+    final expenses = TransactionAnalytics.total(
+      items,
+      type: TransactionType.expense,
+    );
+    final grouped = <String, List<Transaction>>{};
+    for (final t in items) {
+      grouped.putIfAbsent(_dayLabel(t.date), () => []).add(t);
+    }
+    final filterCount =
+        (_type == null ? 0 : 1) +
+        (_category == null ? 0 : 1) +
+        (_range == null ? 0 : 1);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Transaction History'),
-        elevation: 0,
+        title: const Text('Transactions'),
+        actions: [
+          IconButton(
+            onPressed:
+                widget.onAdd ??
+                () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  useSafeArea: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const AddTransactionScreen(),
+                ),
+            icon: const Icon(Icons.add),
+            tooltip: 'Add transaction',
+          ),
+        ],
       ),
-      body: Column(
-        children: [
-          // 1. Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-              decoration: InputDecoration(
-                hintText: 'Search transactions...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded),
-                        onPressed: () {
-                          setState(() {
-                            _searchQuery = '';
-                          });
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
+      body: provider.isLoadingTransactions
+          ? const Center(child: CircularProgressIndicator())
+          : provider.transactionLoadError != null
+          ? Center(child: Text(provider.transactionLoadError!))
+          : LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                padding: EdgeInsets.fromLTRB(
+                  constraints.maxWidth > 760 ? 32 : 18,
+                  12,
+                  constraints.maxWidth > 760 ? 32 : 18,
+                  110,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-            ),
-          ),
-          
-          // 2. Type Filter (All, Income, Expense)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                FilterChip(
-                  label: const Text('All'),
-                  selected: _selectedTypeFilter == null,
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() {
-                        _selectedTypeFilter = null;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Income'),
-                  selected: _selectedTypeFilter == TransactionType.income,
-                  selectedColor: const Color(0xFF10B981).withValues(alpha: 0.2),
-                  labelStyle: TextStyle(
-                    color: _selectedTypeFilter == TransactionType.income
-                        ? const Color(0xFF10B981)
-                        : null,
-                  ),
-                  onSelected: (selected) {
-                    setState(() {
-                      _selectedTypeFilter = selected ? TransactionType.income : null;
-                      // Clear category filter if it conflicts with income
-                      if (selected &&
-                          _selectedCategoryFilter != null &&
-                          _selectedCategoryFilter != ExpenseCategory.salary &&
-                          _selectedCategoryFilter != ExpenseCategory.other) {
-                        _selectedCategoryFilter = null;
-                      }
-                    });
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Expenses'),
-                  selected: _selectedTypeFilter == TransactionType.expense,
-                  selectedColor: theme.colorScheme.error.withValues(alpha: 0.2),
-                  labelStyle: TextStyle(
-                    color: _selectedTypeFilter == TransactionType.expense
-                        ? theme.colorScheme.error
-                        : null,
-                  ),
-                  onSelected: (selected) {
-                    setState(() {
-                      _selectedTypeFilter = selected ? TransactionType.expense : null;
-                      // Clear category filter if it conflicts with expense
-                      if (selected && _selectedCategoryFilter == ExpenseCategory.salary) {
-                        _selectedCategoryFilter = null;
-                      }
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickDateRange,
-                    icon: const Icon(Icons.date_range_rounded),
-                    label: Text(
-                      _selectedDateRange == null
-                          ? 'All dates'
-                          : '${DateFormat('MMM d').format(_selectedDateRange!.start)} - ${DateFormat('MMM d, y').format(_selectedDateRange!.end)}',
-                      overflow: TextOverflow.ellipsis,
+                children: [
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Search transactions...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _search.text.isEmpty
+                          ? null
+                          : IconButton(
+                              onPressed: () {
+                                _search.clear();
+                                setState(() {});
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
+                      filled: true,
+                      fillColor: theme.cardColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
-                ),
-                if (_selectedDateRange != null) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: () => setState(() => _selectedDateRange = null),
-                    tooltip: 'Clear date filter',
-                    icon: const Icon(Icons.clear_rounded),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          
-          // 3. Category Filter
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: ExpenseCategory.values.where((cat) {
-                if (_selectedTypeFilter == TransactionType.income) {
-                  return cat == ExpenseCategory.salary || cat == ExpenseCategory.other;
-                } else if (_selectedTypeFilter == TransactionType.expense) {
-                  return cat != ExpenseCategory.salary;
-                }
-                return true;
-              }).map((category) {
-                final isSelected = _selectedCategoryFilter == category;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    avatar: Icon(
-                      category.icon,
-                      color: isSelected ? Colors.white : category.color,
-                      size: 14,
-                    ),
-                    label: Text(category.displayName),
-                    selected: isSelected,
-                    selectedColor: category.color,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : null,
-                    ),
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedCategoryFilter = selected ? category : null;
-                      });
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const Divider(height: 24, thickness: 1),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Expanded(child: _ReportValue(label: 'Income', amount: reportIncome, color: const Color(0xFF10B981))),
-                    Expanded(child: _ReportValue(label: 'Expenses', amount: reportExpenses, color: theme.colorScheme.error)),
-                    Expanded(child: _ReportValue(label: 'Net', amount: reportIncome - reportExpenses, color: theme.colorScheme.primary)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          // 4. Transactions List
-          Expanded(
-            child: filteredTransactions.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
                       children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 64,
-                          color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.2),
+                        for (final entry in [
+                          (null, 'All'),
+                          (TransactionType.income, 'Income'),
+                          (TransactionType.expense, 'Expenses'),
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(entry.$2),
+                              selected: _type == entry.$1,
+                              onSelected: (_) => _selectType(entry.$1),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _filters,
+                        icon: const Icon(Icons.tune_rounded, size: 18),
+                        label: Text(
+                          filterCount == 0 ? 'Filter' : 'Filter ($filterCount)',
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No transactions match filters.',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            setState(() => _ascending = !_ascending),
+                        icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                        label: Text(
+                          _ascending ? 'Oldest first' : 'Newest first',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Filtered totals · ${items.length} transactions',
+                    style: theme.textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _Total(
+                            label: 'Income',
+                            amount: income,
+                            color: const Color(0xFF34D399),
+                          ),
+                        ),
+                        Expanded(
+                          child: _Total(
+                            label: 'Expenses',
+                            amount: expenses,
+                            color: const Color(0xFFF87171),
+                          ),
+                        ),
+                        Expanded(
+                          child: _Total(
+                            label: 'Net',
+                            amount: income - expenses,
+                            color: theme.colorScheme.primary,
                           ),
                         ),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: filteredTransactions.length,
-                    itemBuilder: (context, index) {
-                      final transaction = filteredTransactions[index];
-                      return TransactionTile(
-                        transaction: transaction,
-                        onEdit: () => _showEditTransactionSheet(context, transaction),
-                        onDelete: () {
-                          provider.deleteTransaction(transaction.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('Transaction deleted'),
-                              action: SnackBarAction(
-                                label: 'Dismiss',
-                                onPressed: () {},
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
                   ),
-          ),
-        ],
-      ),
+                  const SizedBox(height: 14),
+                  if (items.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 70),
+                      child: Center(
+                        child: Text(
+                          'No transactions found.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                    )
+                  else
+                    for (final group in grouped.entries) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 14, 2, 5),
+                        child: Text(
+                          group.key.toUpperCase(),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      ...group.value.map(
+                        (t) => TransactionTile(
+                          transaction: t,
+                          onEdit: () => _edit(context, t),
+                          onDelete: () => provider.deleteTransaction(t.id),
+                        ),
+                      ),
+                    ],
+                ],
+              ),
+            ),
     );
   }
 
-  void _showEditTransactionSheet(BuildContext context, Transaction transaction) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => AddTransactionScreen(transaction: transaction),
-    );
+  String _dayLabel(DateTime date) {
+    final today = DateTime.now();
+    final day = DateTime(date.year, date.month, date.day);
+    if (day == DateTime(today.year, today.month, today.day)) return 'Today';
+    if (day ==
+        DateTime(
+          today.year,
+          today.month,
+          today.day,
+        ).subtract(const Duration(days: 1))) {
+      return 'Yesterday';
+    }
+    return DateFormat('EEEE, d MMMM').format(date);
   }
+
+  void _edit(BuildContext context, Transaction t) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => AddTransactionScreen(transaction: t),
+  );
 }
 
-class _ReportValue extends StatelessWidget {
+class _Total extends StatelessWidget {
+  const _Total({
+    required this.label,
+    required this.amount,
+    required this.color,
+  });
   final String label;
   final double amount;
   final Color color;
-
-  const _ReportValue({required this.label, required this.amount, required this.color});
-
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Text(
-            '\$${amount.toStringAsFixed(2)}',
-            style: TextStyle(color: color, fontWeight: FontWeight.bold),
-          ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 4),
+      Text(
+        NumberFormat.currency(
+          locale: 'en_IN',
+          symbol: '₹',
+          decimalDigits: 0,
+        ).format(amount),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+        ),
+      ),
+    ],
+  );
 }
