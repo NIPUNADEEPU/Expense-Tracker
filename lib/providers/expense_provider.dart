@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 
 import '../models/transaction.dart';
+import '../models/monthly_budget.dart';
 import '../models/category.dart';
 import '../models/transaction_analytics.dart';
 import '../services/notification_service.dart';
@@ -18,6 +19,11 @@ class ExpenseProvider with ChangeNotifier {
   StreamSubscription? _authSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
       _firestoreSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _budgetSubscription;
+  final List<MonthlyBudget> _budgets = [];
+  final Set<String> _notifiedBudgetThresholds = {};
+  Map<String, double> _previousBudgetRatios = {};
+  bool _hasBudgetBaseline = false;
 
   String? _currentUserId;
   bool _isLoadingTransactions = true;
@@ -44,6 +50,7 @@ class ExpenseProvider with ChangeNotifier {
 
         _currentUserId = user.uid;
         _subscribeToTransactions(user.uid);
+        _subscribeToBudgets(user.uid);
 
         if (!kIsWeb) {
           unawaited(NotificationService.registerCurrentUserDevice());
@@ -51,6 +58,12 @@ class ExpenseProvider with ChangeNotifier {
       } else {
         _currentUserId = null;
         _unsubscribeFromTransactions();
+        _budgetSubscription?.cancel();
+        _budgetSubscription = null;
+        _budgets.clear();
+        _notifiedBudgetThresholds.clear();
+        _previousBudgetRatios.clear();
+        _hasBudgetBaseline = false;
         _transactions.clear();
         _isLoadingTransactions = false;
         _transactionLoadError = null;
@@ -88,6 +101,7 @@ class ExpenseProvider with ChangeNotifier {
         _transactions
           ..clear()
           ..addAll(transactions);
+        _evaluateBudgetThresholds();
 
         _isLoadingTransactions = false;
         _transactionLoadError = null;
@@ -102,6 +116,49 @@ class ExpenseProvider with ChangeNotifier {
     );
   }
 
+  void _subscribeToBudgets(String uid) {
+    _budgetSubscription?.cancel();
+    _budgetSubscription = FirebaseFirestore.instance.collection('users').doc(uid).collection('budgets').snapshots().listen((snapshot) {
+      if (_currentUserId != uid) return;
+      _budgets..clear();
+      for (final doc in snapshot.docs) { try { _budgets.add(MonthlyBudget.fromJson(doc.id, doc.data())); } catch (error) { debugPrint('Error parsing budget ${doc.id}: $error'); } }
+      _evaluateBudgetThresholds();
+      notifyListeners();
+    }, onError: (error) { debugPrint('Firestore budget listen error: $error'); });
+  }
+
+  void _evaluateBudgetThresholds() {
+    final current = <String, double>{};
+    for (final budget in _budgets) {
+      final key = budget.id;
+      final ratio = BudgetAnalytics.usageRatio(_transactions, budget);
+      current[key] = ratio;
+      if (_hasBudgetBaseline) {
+        final threshold = BudgetAnalytics.thresholdCrossed(_previousBudgetRatios[key] ?? 0, ratio);
+        final alertKey = '${budget.periodKey}:${budget.currency.code}:${budget.id}:$threshold';
+        if (threshold != null && _notifiedBudgetThresholds.add(alertKey)) {
+          NotificationService.showBudgetAlert(budget: budget, threshold: threshold);
+        }
+      }
+    }
+    _previousBudgetRatios = current;
+    _hasBudgetBaseline = true;
+  }
+
+  List<MonthlyBudget> get budgets => List.unmodifiable(_budgets);
+  List<MonthlyBudget> budgetsForMonth(int year, int month) => _budgets.where((b) => b.year == year && b.month == month).toList();
+  Future<void> saveBudget({required int year, required int month, required double amount, required TransactionCurrency currency, ExpenseCategory? category}) async {
+    final uid = _currentUserId ?? FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) throw StateError('You must be signed in to save a budget.');
+    final id = MonthlyBudget.documentId(year, month, category);
+    await FirebaseFirestore.instance.collection('users').doc(uid).collection('budgets').doc(id).set(MonthlyBudget(id: id, year: year, month: month, amount: amount, currency: currency, category: category).toJson());
+  }
+  Future<void> deleteBudget(MonthlyBudget budget) async {
+    final uid = _currentUserId;
+    if (uid == null) return;
+    await FirebaseFirestore.instance.collection('users').doc(uid).collection('budgets').doc(budget.id).delete();
+  }
+
   void _unsubscribeFromTransactions() {
     _firestoreSubscription?.cancel();
     _firestoreSubscription = null;
@@ -111,6 +168,7 @@ class ExpenseProvider with ChangeNotifier {
   void dispose() {
     _authSubscription?.cancel();
     _firestoreSubscription?.cancel();
+    _budgetSubscription?.cancel();
     super.dispose();
   }
 

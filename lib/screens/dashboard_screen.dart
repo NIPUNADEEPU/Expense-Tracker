@@ -6,6 +6,8 @@ import '../models/category.dart';
 import '../models/transaction.dart';
 import '../models/transaction_analytics.dart';
 import '../providers/expense_provider.dart';
+import '../widgets/expense_chart.dart';
+import '../widgets/budget_progress_card.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
 import 'history_screen.dart';
@@ -127,6 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           type: transaction.type,
           category: category,
           date: transaction.date,
+          currency: transaction.currency,
         ),
       );
     }
@@ -168,7 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: IndexedStack(index: _selectedIndex, children: pages),
         ),
       ),
-      floatingActionButton: (_selectedIndex == 0 || _selectedIndex == 1)
+      floatingActionButton: _selectedIndex == 1
           ? FloatingActionButton.extended(
               onPressed: _openAddTransaction,
               icon: const Icon(Icons.add_rounded),
@@ -228,13 +231,6 @@ class HomeDashboard extends StatelessWidget {
       year: now.year,
       month: now.month,
     );
-    final categories = TransactionAnalytics.spendingByCategory(
-      transactions,
-      year: now.year,
-      month: now.month,
-    );
-    final topCategories = categories.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
     final user = FirebaseAuth.instance.currentUser;
     final name = user?.displayName?.trim().isNotEmpty == true
         ? user!.displayName!.trim().split(' ').first
@@ -335,6 +331,11 @@ class HomeDashboard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
+
+                    const BudgetProgressCard(),
+
+                    const SizedBox(height: 16),
+
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
@@ -348,93 +349,10 @@ class HomeDashboard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 30),
-                    _SectionHeading(
-                      title: 'Spending this month',
-                      trailing: Text(
-                        '${topCategories.length} categories',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFEDE5DD)),
-                      ),
-                      child: topCategories.isEmpty
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'No spending recorded this month.',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Add your first transaction to start tracking.',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            )
-                          : Column(
-                              children: topCategories.take(4).map((entry) {
-                                final share = expenses == 0
-                                    ? 0.0
-                                    : entry.value / expenses;
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 8,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            entry.key.icon,
-                                            size: 17,
-                                            color: entry.key.color,
-                                          ),
-                                          const SizedBox(width: 9),
-                                          Expanded(
-                                            child: Text(entry.key.displayName),
-                                          ),
-                                          Text(
-                                            _inr.format(entry.value),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            '${(share * 100).round()}%',
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.bodySmall,
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: LinearProgressIndicator(
-                                          value: share.clamp(0, 1),
-                                          minHeight: 5,
-                                          backgroundColor: const Color(
-                                            0xFFF2ECE6,
-                                          ),
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                entry.key.color,
-                                              ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
+                    ExpenseCategoryChart(
+                      transactions: transactions,
+                      year: now.year,
+                      month: now.month,
                     ),
                     const SizedBox(height: 28),
                     _SectionHeading(

@@ -5,6 +5,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import '../firebase_options.dart';
+import '../models/monthly_budget.dart';
+import '../models/transaction.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -17,6 +19,11 @@ class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   static bool _foregroundListenerRegistered = false;
+
+  static void showBudgetAlert({required MonthlyBudget budget, required int threshold}) {
+    final amount = budget.currency.symbol + budget.amount.toStringAsFixed(0);
+    scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(content: Text(threshold == 100 ? 'Budget reached: $amount for ${budget.category?.displayName ?? 'this month'}.' : 'Budget alert: 80% of $amount used for ${budget.category?.displayName ?? 'this month'}.'), behavior: SnackBarBehavior.floating));
+  }
 
   static Future<void> initialize() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);

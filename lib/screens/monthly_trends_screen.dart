@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../models/transaction.dart';
 import '../models/transaction_analytics.dart';
 import '../providers/expense_provider.dart';
+import '../widgets/expense_chart.dart';
+import '../widgets/income_expense_chart.dart';
 
 class MonthlyTrendsScreen extends StatefulWidget {
   const MonthlyTrendsScreen({super.key, required this.onAdd});
@@ -197,42 +199,17 @@ class _MonthlyTrendsScreenState extends State<MonthlyTrendsScreen> {
                     ),
                   ] else ...[
                     const SizedBox(height: 28),
-                    Text(
-                      'TOP SPENDING CATEGORIES',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        letterSpacing: 1.1,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    IncomeExpenseChart(
+                      transactions: transactions,
+                      year: _year,
+                      month: _month,
                     ),
-                    const SizedBox(height: 10),
-                    if (categories.isEmpty)
-                      Text(
-                        'No spending data for $periodLabel.',
-                        style: theme.textTheme.bodyMedium,
-                      )
-                    else
-                      ...categories.map(
-                        (category) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 9),
-                          child: Row(
-                            children: [
-                              Icon(
-                                category.key.icon,
-                                size: 19,
-                                color: category.key.color,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(child: Text(category.key.displayName)),
-                              Text(
-                                currency.format(category.value),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    const SizedBox(height: 16),
+                    ExpenseCategoryChart(
+                      transactions: transactions,
+                      year: _year,
+                      month: _month,
+                    ),
                     const SizedBox(height: 26),
                     if (categories.isNotEmpty || hasComparison) ...[
                       Text(
