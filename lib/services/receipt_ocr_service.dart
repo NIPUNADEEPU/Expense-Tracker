@@ -1,8 +1,44 @@
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
-/// Receipt details inferred from text recognized by Google ML Kit.
+import '../models/category.dart';
+import '../models/transaction.dart';
+
+class ReceiptLineItem {
+  const ReceiptLineItem({
+    required this.title,
+    required this.totalPrice,
+    required this.category,
+    this.quantity,
+    this.unitPrice,
+  });
+
+  final String title;
+  final double? quantity;
+  final double? unitPrice;
+  final double totalPrice;
+  final ExpenseCategory category;
+
+  double get amount => totalPrice;
+
+  ReceiptLineItem copyWith({ExpenseCategory? category}) {
+    return ReceiptLineItem(
+      title: title,
+      totalPrice: totalPrice,
+      category: category ?? this.category,
+      quantity: quantity,
+      unitPrice: unitPrice,
+    );
+  }
+}
+
 class ReceiptScanResult {
-  const ReceiptScanResult({this.amount, this.merchant, this.rawText = ''});
+  const ReceiptScanResult({
+    this.amount,
+    this.title,
+    this.items = const [],
+    this.rawText = '',
+    this.currency = TransactionCurrency.unknown,
+  });
 
   final double? amount;
 
@@ -21,13 +57,10 @@ class ReceiptScanResult {
 }
 
 class ReceiptOcrService {
-  ReceiptOcrService({
-    TextRecognizer? recognizer,
-  })  : _recognizer = recognizer ??
-            TextRecognizer(
-              script: TextRecognitionScript.latin,
-            ),
-        _ownsRecognizer = recognizer == null;
+  ReceiptOcrService({TextRecognizer? recognizer})
+    : _recognizer =
+          recognizer ?? TextRecognizer(script: TextRecognitionScript.latin),
+      _ownsRecognizer = recognizer == null;
 
   final TextRecognizer _recognizer;
   final bool _ownsRecognizer;
@@ -36,27 +69,137 @@ class ReceiptOcrService {
   // OCR
   // ================================================================
 
-  // ================================================================
-  // OCR
-  // ================================================================
-
-  Future<ReceiptScanResult> scanImage(
-    String imagePath,
-  ) async {
+  Future<ReceiptScanResult> scanImage(String imagePath) async {
     final recognizedText = await _recognizer.processImage(
       InputImage.fromFilePath(imagePath),
     );
-    return parseRecognizedText(recognizedText.text);
+
+    final visualText = _textInVisualRows(recognizedText);
+
+    return parseRecognizedText(visualText);
   }
 
-  Future<void> dispose() async {
-    if (_ownsRecognizer) await _recognizer.close();
+    Future<void> dispose() async {
+    if (_ownsRecognizer) {
+      await _recognizer.close();
+    }
   }
+
+  // ================================================================
+  // CURRENCY DETECTION
+  // ================================================================
+
+  static TransactionCurrency _detectCurrency(String rawText) {
+    final text = rawText.toUpperCase();
+
+    // Explicit currency codes take priority.
+    if (RegExp(r'\bINR\b').hasMatch(text)) {
+      return TransactionCurrency.inr;
+    }
+    if (RegExp(r'\bUSD\b').hasMatch(text)) {
+      return TransactionCurrency.usd;
+    }
+    if (RegExp(r'\bEUR\b').hasMatch(text)) {
+      return TransactionCurrency.eur;
+    }
+    if (RegExp(r'\bGBP\b').hasMatch(text)) {
+      return TransactionCurrency.gbp;
+    }
+    if (RegExp(r'\bCAD\b').hasMatch(text)) {
+      return TransactionCurrency.cad;
+    }
+    if (RegExp(r'\bAUD\b').hasMatch(text)) {
+      return TransactionCurrency.aud;
+    }
+    if (RegExp(r'\bJPY\b').hasMatch(text)) {
+      return TransactionCurrency.jpy;
+    }
+
+    // Unambiguous currency symbols and Indian rupee notation.
+    if (text.contains('₹') ||
+        RegExp(r'\bRS\.?\b').hasMatch(text) ||
+        RegExp(r'\bRUPEES?\b').hasMatch(text)) {
+      return TransactionCurrency.inr;
+    }
+
+    if (text.contains('€')) {
+      return TransactionCurrency.eur;
+    }
+
+    if (text.contains('£')) {
+      return TransactionCurrency.gbp;
+    }
+
+    // Ambiguous symbols must not trigger a currency guess.
+    return TransactionCurrency.unknown;
+  }
+  // ================================================================
+  // REBUILD OCR TEXT USING VISUAL POSITION
+  // ================================================================
+
+  static String _textInVisualRows(RecognizedText recognizedText) {
+    final lines =
+        recognizedText.blocks
+            .expand((block) => block.lines)
+            .where((line) => line.text.trim().isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.boundingBox.top.compareTo(b.boundingBox.top));
+
+    if (lines.isEmpty) {
+      return recognizedText.text;
+    }
+
+    final rows = <List<TextLine>>[];
+
+    for (final line in lines) {
+      final centerY = line.boundingBox.top + line.boundingBox.height / 2;
+
+      List<TextLine>? matchingRow;
+
+      for (final row in rows) {
+        final reference = row.first;
+
+        final referenceCenterY =
+            reference.boundingBox.top + reference.boundingBox.height / 2;
+
+        final tolerance =
+            (reference.boundingBox.height > line.boundingBox.height
+                ? reference.boundingBox.height
+                : line.boundingBox.height) *
+            0.65;
+
+        if ((centerY - referenceCenterY).abs() <= tolerance) {
+          matchingRow = row;
+          break;
+        }
+      }
+
+      final row = matchingRow ?? <TextLine>[];
+
+      if (matchingRow == null) {
+        rows.add(row);
+      }
+
+      row.add(line);
+    }
+
+    return rows
+        .map((row) {
+          row.sort((a, b) => a.boundingBox.left.compareTo(b.boundingBox.left));
+
+          return row.map((line) => line.text.trim()).join('   ');
+        })
+        .join('\n');
+  }
+
+  // ================================================================
+  // MAIN PARSER
+  // ================================================================
 
   static ReceiptScanResult parseRecognizedText(String rawText) {
     final lines = rawText
         .split(RegExp(r'\r?\n'))
-        .map((line) => line.trim())
+        .map(_normalizeLine)
         .where((line) => line.isNotEmpty)
         .toList();
 
@@ -1079,15 +1222,47 @@ class ReceiptOcrService {
   // ================================================================
 
   static double? _findTotal(List<String> lines) {
-    final totalLabel = RegExp(
-      r'\b(?:grand\s*total|amount\s*due|net\s*amount|total)\b',
+    final totalLabels = RegExp(
+      r'\b(?:'
+      r'grand\s*total|'
+      r'total\s*amount|'
+      r'amount\s*due|'
+      r'net\s*amount|'
+      r'final\s*amount|'
+      r'payable|'
+      r'balance\s*due|'
+      r'total'
+      r')\b',
       caseSensitive: false,
     );
-    for (final line in lines.reversed) {
-      if (!totalLabel.hasMatch(line)) continue;
+
+    for (var i = lines.length - 1; i >= 0; i--) {
+      final line = lines[i];
+
+      if (!totalLabels.hasMatch(line)) {
+        continue;
+      }
+
       final amounts = _amountsIn(line);
-      if (amounts.isNotEmpty) return amounts.last;
+
+      if (amounts.isNotEmpty) {
+        return amounts.last;
+      }
+
+      // Handles:
+      //
+      // TOTAL
+      // 707.70
+
+      if (i + 1 < lines.length) {
+        final nextAmount = _parseStandalonePrice(lines[i + 1]);
+
+        if (nextAmount != null) {
+          return nextAmount;
+        }
+      }
     }
+
     return null;
   }
 
@@ -1096,27 +1271,179 @@ class ReceiptOcrService {
   // ================================================================
 
   static List<double> _amountsIn(String text) {
-    final matches = RegExp(
-      r'(?:₹|Rs\.?|INR|\$|USD)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+(?:\.\d{2}))',
+    final pattern = RegExp(
+      r'(?:₹|Rs\.?|INR|\$|USD|€|£)?\s*'
+      r'(\d{1,3}(?:,\d{3})+|\d+)'
+      r'(?:\.(\d{1,2}))?',
       caseSensitive: false,
-    ).allMatches(text);
-    return matches
-        .map((match) => double.tryParse(match.group(1)!.replaceAll(',', '')))
+    );
+
+    return pattern
+        .allMatches(text)
+        .map((match) {
+          final wholeNumber = match.group(1)!.replaceAll(',', '');
+
+          final decimalPart = match.group(2);
+
+          final normalized = decimalPart == null
+              ? wholeNumber
+              : '$wholeNumber.$decimalPart';
+
+          return double.tryParse(normalized);
+        })
         .whereType<double>()
-        .where((amount) => amount > 0)
+        .where((value) => value > 0)
         .toList();
   }
 
-  static String? _findMerchant(List<String> lines) {
-    for (final line in lines.take(4)) {
-      final isLikelyMerchant =
-          line.length >= 3 &&
-          !RegExp(
-            r'\d{3,}|invoice|receipt|tax|gst|phone|date',
-            caseSensitive: false,
-          ).hasMatch(line);
-      if (isLikelyMerchant) return line;
+  // ================================================================
+  // FALLBACK TOTAL
+  // ================================================================
+
+  static double? _findLargestReasonableAmount(List<String> lines) {
+    final values = <double>[];
+
+    for (final line in lines) {
+      if (_isNonItemLine(line)) {
+        continue;
+      }
+
+      values.addAll(_amountsIn(line));
     }
-    return null;
+
+    if (values.isEmpty) {
+      return null;
+    }
+
+    values.sort();
+
+    return values.last;
+  }
+
+  // ================================================================
+  // CALCULATE TOTAL FROM ITEMS
+  // ================================================================
+
+  static double? _calculateTotalFromItems(List<ReceiptLineItem> items) {
+    if (items.isEmpty) {
+      return null;
+    }
+
+    final total = items.fold<double>(0, (sum, item) => sum + item.totalPrice);
+
+    return total > 0 ? total : null;
+  }
+
+  // ================================================================
+  // REMOVE DUPLICATES
+  // ================================================================
+
+  static List<ReceiptLineItem> _removeDuplicateItems(
+    List<ReceiptLineItem> items,
+  ) {
+    final seen = <String>{};
+    final result = <ReceiptLineItem>[];
+
+    for (final item in items) {
+      final key =
+          '${item.title.toLowerCase()}|'
+          '${item.quantity}|'
+          '${item.unitPrice}|'
+          '${item.totalPrice}';
+
+      if (seen.add(key)) {
+        result.add(item);
+      }
+    }
+
+    return result;
+  }
+
+  // ================================================================
+  // NORMALIZE OCR LINE
+  // ================================================================
+
+  static String _normalizeLine(String line) {
+    return line
+        .replaceAll(RegExp(r'[|]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  // ================================================================
+  // SLOGAN DETECTION
+  // ================================================================
+
+  static bool _looksLikeSlogan(String line) {
+    return RegExp(
+      r'\b(?:'
+      r'good\s+food|'
+      r'great\s+memories|'
+      r'thank\s+you|'
+      r'visit\s+again|'
+      r'welcome|'
+      r'enjoy\s+your|'
+      r'come\s+again'
+      r')\b',
+      caseSensitive: false,
+    ).hasMatch(line);
+  }
+
+  // ================================================================
+  // NUMBER PARSER
+  // ================================================================
+
+  static double? _parseNumber(String value) {
+    final match = RegExp(r'(\d+(?:,\d{3})*(?:\.\d{1,2})?)').firstMatch(value);
+
+    if (match == null) {
+      return null;
+    }
+
+    return double.tryParse(match.group(1)!.replaceAll(',', ''));
+  }
+
+  // ================================================================
+  // FALLBACK CATEGORY
+  // ================================================================
+
+  static ExpenseCategory _categoryFor(String title) {
+    final text = title.toLowerCase();
+
+    if (RegExp(
+      r'food|milk|bread|rice|vegetable|'
+      r'fruit|grocery|coffee|tea|meal|'
+      r'pizza|burger|snack|restaurant|'
+      r'dosa|paneer|jamun',
+    ).hasMatch(text)) {
+      return ExpenseCategory.food;
+    }
+
+    if (RegExp(
+      r'petrol|diesel|fuel|taxi|uber|ola|'
+      r'metro|bus|train|parking',
+    ).hasMatch(text)) {
+      return ExpenseCategory.travel;
+    }
+
+    if (RegExp(
+      r'electricity|water|gas|internet|wifi|'
+      r'mobile|recharge|phone',
+    ).hasMatch(text)) {
+      return ExpenseCategory.bills;
+    }
+
+    if (RegExp(r'movie|cinema|game|netflix|spotify|concert').hasMatch(text)) {
+      return ExpenseCategory.entertainment;
+    }
+
+    if (RegExp(
+      r'shirt|shoe|dress|bag|cosmetic|'
+      r'clothing|stationery|soap',
+    ).hasMatch(text)) {
+      return ExpenseCategory.shopping;
+    }
+
+    return ExpenseCategory.other;
   }
 }
