@@ -165,36 +165,43 @@ setState(() {
   _selectedCurrency = result.currency;
 });
 
-    // STEP 2: Classify each product separately.
+    // STEP 2: Classify each product separately without blocking the
+    // whole receipt scan on slow ML responses.
     final drafts = <_ReceiptItemDraft>[];
 
-    for (final item in result.items) {
-      final title = item.title.trim();
+    final classifiedItems = await Future.wait(
+      result.items.map((item) async {
+        final title = item.title.trim();
 
-      if (title.isEmpty || item.totalPrice <= 0) {
-        continue;
-      }
-
-      var category = item.category;
-
-      try {
-        final prediction = await _mlApiService.predictCategory(title);
-
-        if (prediction != null) {
-          category =
-              _categoryFromMlName(prediction.category) ?? category;
+        if (title.isEmpty || item.totalPrice <= 0) {
+          return null;
         }
-      } catch (error) {
-        debugPrint('ML classification failed for "$title": $error');
-      }
 
-      drafts.add(
-        _ReceiptItemDraft(
+        var category = item.category;
+
+        try {
+          final prediction = await _mlApiService
+              .predictCategory(title)
+              .timeout(const Duration(seconds: 3));
+
+          if (prediction != null) {
+            category = _categoryFromMlName(prediction.category) ?? category;
+          }
+        } catch (error) {
+          debugPrint('ML classification failed for "$title": $error');
+        }
+
+        return _ReceiptItemDraft(
           title: title,
           amount: item.totalPrice,
           category: category,
-        ),
-      );
+        );
+      }),
+      eagerError: false,
+    );
+
+    for (final draft in classifiedItems.whereType<_ReceiptItemDraft>()) {
+      drafts.add(draft);
     }
 
     if (!mounted) {
@@ -676,96 +683,6 @@ DropdownButtonFormField<TransactionCurrency>(
   },
 ),
 const SizedBox(height: 16),
-
-              if (_receiptItems.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Receipt items (${_receiptItems.length})',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Check the category for each item. Remove anything that is not a purchase.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 10),
-                      ..._receiptItems.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final item = entry.value;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text('\$${item.amount.toStringAsFixed(2)}'),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              DropdownButton<ExpenseCategory>(
-                                value: item.category,
-                                underline: const SizedBox.shrink(),
-                                onChanged: (category) {
-                                  if (category == null) return;
-                                  setState(() {
-                                    _receiptItems[index] = item.copyWith(
-                                      category: category,
-                                    );
-                                  });
-                                },
-                                items: ExpenseCategory.values
-                                    .where(
-                                      (category) =>
-                                          category != ExpenseCategory.salary,
-                                    )
-                                    .map(
-                                      (category) => DropdownMenuItem(
-                                        value: category,
-                                        child: Text(category.displayName),
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
-                              IconButton(
-                                tooltip: 'Remove item',
-                                onPressed: () {
-                                  setState(() => _receiptItems.removeAt(index));
-                                },
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
 
               // 3. Amount Input Field
               TextFormField(
