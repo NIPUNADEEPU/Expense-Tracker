@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/services/receipt_ocr_service.dart';
+
+import 'package:expense_tracker/services/receipt_ocr_service.dart';
 
 void main() {
   group('ReceiptOcrService', () {

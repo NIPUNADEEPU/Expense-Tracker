@@ -119,67 +119,36 @@ class ExpenseProvider with ChangeNotifier {
     return totals;
   }
 
-  void addTransaction({
-    required String title,
-    required double amount,
-    required TransactionType type,
-    required ExpenseCategory category,
-    required DateTime date,
-  }) {
-    final uid = _currentUserId;
-    if (uid == null) return;
+  Future<void> addTransaction({
+  required String title,
+  required double amount,
+  required TransactionType type,
+  required ExpenseCategory category,
+  required DateTime date,
+  TransactionCurrency currency = TransactionCurrency.unknown,
+}) async {
+  final uid = _currentUserId;
 
-    final id = _uuid.v4();
-    final newTransaction = Transaction(
-      id: id,
-      title: title,
-      amount: amount,
-      type: type,
-      category: category,
-      date: date,
+  if (uid == null) {
+    throw StateError(
+      'You must be signed in to save a transaction.',
     );
-
-    unawaited(_writeTransaction(uid, id, newTransaction));
   }
 
-  Future<void> addTransactions({
-    required List<({String title, double amount, ExpenseCategory category})>
-    items,
-    required DateTime date,
-  }) async {
-    final uid = _currentUserId;
-    if (uid == null) {
-      throw StateError('You must be signed in to save receipt items.');
-    }
-    if (items.isEmpty) {
-      throw ArgumentError('At least one receipt item is required.');
-    }
-    if (items.any(
-      (item) => item.title.trim().isEmpty || !item.amount.isFinite,
-    )) {
-      throw ArgumentError('Receipt items must have a title and valid amount.');
-    }
+  final id = _uuid.v4();
 
-    final batch = FirebaseFirestore.instance.batch();
-    for (final item in items) {
-      final id = _uuid.v4();
-      final transaction = Transaction(
-        id: id,
-        title: item.title,
-        amount: item.amount,
-        type: TransactionType.expense,
-        category: item.category,
-        date: date,
-      );
-      final reference = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('transactions')
-          .doc(id);
-      batch.set(reference, transaction.toJson());
-    }
-    await batch.commit();
-  }
+  final newTransaction = Transaction(
+    id: id,
+    title: title,
+    amount: amount,
+    type: type,
+    category: category,
+    date: date,
+    currency: currency,
+  );
+
+  await _writeTransaction(uid, id, newTransaction);
+}
 
   void deleteTransaction(String id) {
     final uid = _currentUserId;
