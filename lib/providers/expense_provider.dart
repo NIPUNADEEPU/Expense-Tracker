@@ -116,28 +116,36 @@ class ExpenseProvider with ChangeNotifier {
     return totals;
   }
 
-  void addTransaction({
-    required String title,
-    required double amount,
-    required TransactionType type,
-    required ExpenseCategory category,
-    required DateTime date,
-  }) {
-    final uid = _currentUserId;
-    if (uid == null) return;
+  Future<void> addTransaction({
+  required String title,
+  required double amount,
+  required TransactionType type,
+  required ExpenseCategory category,
+  required DateTime date,
+  TransactionCurrency currency = TransactionCurrency.unknown,
+}) async {
+  final uid = _currentUserId;
 
-    final id = _uuid.v4();
-    final newTransaction = Transaction(
-      id: id,
-      title: title,
-      amount: amount,
-      type: type,
-      category: category,
-      date: date,
+  if (uid == null) {
+    throw StateError(
+      'You must be signed in to save a transaction.',
     );
-
-    unawaited(_writeTransaction(uid, id, newTransaction));
   }
+
+  final id = _uuid.v4();
+
+  final newTransaction = Transaction(
+    id: id,
+    title: title,
+    amount: amount,
+    type: type,
+    category: category,
+    date: date,
+    currency: currency,
+  );
+
+  await _writeTransaction(uid, id, newTransaction);
+}
 
   void deleteTransaction(String id) {
     final uid = _currentUserId;
