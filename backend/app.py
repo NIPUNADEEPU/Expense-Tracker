@@ -3,6 +3,7 @@ from pathlib import Path
 import joblib
 from fastapi import FastAPI
 from pydantic import BaseModel
+from sklearn import __version__ as sklearn_version
 
 
 # ---------------------------------------------------------
@@ -22,6 +23,36 @@ VECTORIZER_PATH = ML_DIR / "tfidf_vectorizer.pkl"
 
 model = joblib.load(MODEL_PATH)
 vectorizer = joblib.load(VECTORIZER_PATH)
+
+CATEGORY_ALIASES = {
+    'food': 'Food',
+    'food & dining': 'Food',
+    'travel': 'Travel',
+    'shopping': 'Shopping',
+    'bills': 'Bills',
+    'utilities': 'Bills',
+    'entertainment': 'Entertainment',
+    'home': 'Home',
+    'personal care': 'Personal Care',
+    'personalcare': 'Personal Care',
+    'financial': 'Financial',
+    'finance': 'Financial',
+}
+
+
+def normalize_prediction_label(label):
+    label = str(label).strip()
+    if not label:
+        return 'Unknown'
+
+    normalized = label.replace('_', ' ').replace('-', ' ')
+    normalized = ' '.join(normalized.split())
+    lowered = normalized.lower()
+
+    return CATEGORY_ALIASES.get(lowered, normalized)
+
+
+print(f"Loaded model and vectorizer with scikit-learn {sklearn_version}")
 
 
 # ---------------------------------------------------------
@@ -56,12 +87,13 @@ def predict(request: PredictionRequest):
     description_tfidf = vectorizer.transform([description])
 
     prediction = model.predict(description_tfidf)[0]
+    category = normalize_prediction_label(prediction)
 
     probabilities = model.predict_proba(description_tfidf)[0]
 
     confidence = float(max(probabilities))
 
     return {
-        "category": str(prediction),
+        "category": category,
         "confidence": round(confidence, 2)
     }

@@ -211,36 +211,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     super.dispose();
   }
 
-  ExpenseCategory? _categoryFromMlName(String category) {
-    switch (category.trim().toLowerCase()) {
-      case 'food':
-        return ExpenseCategory.food;
-
-      case 'travel':
-        return ExpenseCategory.travel;
-
-      case 'shopping':
-        return ExpenseCategory.shopping;
-
-      case 'bills':
-        return ExpenseCategory.bills;
-
-      case 'entertainment':
-        return ExpenseCategory.entertainment;
-
-      case 'home':
-        return ExpenseCategory.home;
-
-      case 'personal care':
-        return ExpenseCategory.personalCare;
-
-      case 'financial':
-        return ExpenseCategory.financial;
-
-      default:
-        return null;
-    }
-  }
+  ExpenseCategory? _categoryFromMlName(String category) =>
+      MlApiService.categoryFromPrediction(category);
 
   Future<void> _scanReceipt() async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -309,12 +281,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 .timeout(const Duration(seconds: 3));
 
             if (prediction != null) {
-              category = _receiptCategoryOrFallback(
-                _categoryFromMlName(prediction.category) ?? category,
-              );
+              final mappedCategory = _categoryFromMlName(prediction.category);
+
+              if (mappedCategory != null) {
+                category = mappedCategory;
+              } else {
+                debugPrint(
+                  'ML prediction ignored for "$title": unsupported category "${prediction.category}"',
+                );
+              }
             }
           } catch (error) {
             debugPrint('ML classification failed for "$title": $error');
+            // Preserve the last valid OCR-derived category instead of
+            // silently coercing the item to Other on request failure.
           }
 
           return _ReceiptItemDraft(

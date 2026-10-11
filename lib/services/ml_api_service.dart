@@ -4,31 +4,66 @@ import 'package:flutter/foundation.dart';
 
 import 'package:http/http.dart' as http;
 
+import '../models/category.dart';
+
 class MlPrediction {
   final String category;
   final double confidence;
 
-  const MlPrediction({
-    required this.category,
-    required this.confidence,
-  });
+  const MlPrediction({required this.category, required this.confidence});
 }
 
 class MlApiService {
   // Android emulator -> computer localhost: 10.0.2.2
   // Physical Android device -> use your PC's LAN IP, for example:
   // flutter run --dart-define=ML_API_BASE_URL=http://192.168.1.12:8000
- static const String _baseUrl = String.fromEnvironment(
-  'ML_API_BASE_URL',
-  defaultValue: 'http://192.168.1.9:8000',
-);
+  static const String _baseUrl = String.fromEnvironment(
+    'ML_API_BASE_URL',
+    defaultValue: 'http://192.168.1.9:8000',
+  );
 
   final http.Client _client;
   final Duration _timeout;
 
   MlApiService({http.Client? client, Duration? timeout})
-      : _client = client ?? http.Client(),
-        _timeout = timeout ?? const Duration(seconds: 4);
+    : _client = client ?? http.Client(),
+      _timeout = timeout ?? const Duration(seconds: 4);
+
+  static ExpenseCategory? categoryFromPrediction(String category) {
+    final normalized = category
+        .trim()
+        .replaceAll(RegExp(r'[_-]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
+
+    switch (normalized) {
+      case 'food':
+      case 'food & dining':
+        return ExpenseCategory.food;
+      case 'travel':
+      case 'transport':
+        return ExpenseCategory.travel;
+      case 'shopping':
+        return ExpenseCategory.shopping;
+      case 'bills':
+      case 'utilities':
+      case 'bill':
+        return ExpenseCategory.bills;
+      case 'entertainment':
+        return ExpenseCategory.entertainment;
+      case 'home':
+      case 'home improvement':
+        return ExpenseCategory.home;
+      case 'personal care':
+      case 'personalcare':
+        return ExpenseCategory.personalCare;
+      case 'financial':
+      case 'finance':
+        return ExpenseCategory.financial;
+      default:
+        return null;
+    }
+  }
 
   Future<MlPrediction?> predictCategory(String description) async {
     final trimmedDescription = description.trim();
@@ -41,12 +76,8 @@ class MlApiService {
       final response = await _client
           .post(
             Uri.parse('$_baseUrl/predict'),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'description': trimmedDescription,
-            }),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'description': trimmedDescription}),
           )
           .timeout(_timeout);
 
