@@ -1444,6 +1444,8 @@ class ReceiptOcrService {
       return ExpenseCategory.shopping;
     }
 
-    return ExpenseCategory.other;
+    // Unknown products must remain available for review instead of being
+    // silently presented as a confident "Other" classification.
+    return ExpenseCategory.uncategorized;
   }
 }

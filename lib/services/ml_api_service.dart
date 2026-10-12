@@ -65,6 +65,15 @@ class MlApiService {
     }
   }
 
+  /// Uses a recognized prediction when available and otherwise preserves the
+  /// category already attached to the receipt item.
+  static ExpenseCategory? resolveCategory(
+    MlPrediction? prediction, {
+    ExpenseCategory? existingCategory,
+  }) => prediction == null
+      ? existingCategory
+      : categoryFromPrediction(prediction.category) ?? existingCategory;
+
   Future<MlPrediction?> predictCategory(String description) async {
     final trimmedDescription = description.trim();
 

@@ -280,17 +280,20 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 .predictCategory(title)
                 .timeout(const Duration(seconds: 3));
 
-            if (prediction != null) {
-              final mappedCategory = _categoryFromMlName(prediction.category);
-
-              if (mappedCategory != null) {
-                category = mappedCategory;
-              } else {
-                debugPrint(
-                  'ML prediction ignored for "$title": unsupported category "${prediction.category}"',
-                );
-              }
+            final mappedCategory = _categoryFromMlName(
+              prediction?.category ?? '',
+            );
+            if (prediction != null && mappedCategory == null) {
+              debugPrint(
+                'ML prediction ignored for "$title": unsupported category "${prediction.category}"',
+              );
             }
+            category =
+                MlApiService.resolveCategory(
+                  prediction,
+                  existingCategory: category,
+                ) ??
+                ExpenseCategory.uncategorized;
           } catch (error) {
             debugPrint('ML classification failed for "$title": $error');
             // Preserve the last valid OCR-derived category instead of

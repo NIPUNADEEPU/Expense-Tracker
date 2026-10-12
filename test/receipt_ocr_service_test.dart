@@ -1,6 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
 
 
+import 'package:expense_tracker/models/category.dart';
 import 'package:expense_tracker/services/receipt_ocr_service.dart';
 
 void main() {
@@ -1060,5 +1061,18 @@ Total                          170.00
         );
       },
     );
+
+    test('unrecognized item category stays reviewable instead of Other', () {
+      const text = '''
+STORE
+Printer Paper 1.00
+Total 1.00
+''';
+
+      final result = ReceiptOcrService.parseRecognizedText(text);
+
+      expect(result.items, hasLength(1));
+      expect(result.items.single.category, ExpenseCategory.uncategorized);
+    });
   });
 }

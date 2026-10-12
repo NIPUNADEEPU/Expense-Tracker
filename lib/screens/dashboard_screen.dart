@@ -9,6 +9,7 @@ import '../providers/expense_provider.dart';
 import '../widgets/expense_chart.dart';
 import '../widgets/budget_progress_card.dart';
 import '../widgets/transaction_tile.dart';
+import '../widgets/sms_category_review_dialog.dart';
 import 'add_transaction_screen.dart';
 import 'history_screen.dart';
 import 'monthly_trends_screen.dart';
@@ -80,41 +81,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) break;
       final category = await showDialog<ExpenseCategory>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('Choose a category (${index + 1}/${pending.length})'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                transaction.title,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(_inr.format(transaction.amount)),
-              const SizedBox(height: 18),
-              ...ExpenseCategory.values
-                  .where(
-                    (category) =>
-                        category != ExpenseCategory.salary &&
-                        category != ExpenseCategory.uncategorized,
-                  )
-                  .map(
-                    (category) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(category.icon, color: category.color),
-                      title: Text(category.displayName),
-                      onTap: () => Navigator.pop(dialogContext, category),
-                    ),
-                  ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Review later'),
-            ),
-          ],
+        builder: (dialogContext) => SmsCategoryReviewDialog(
+          transaction: transaction,
+          index: index + 1,
+          total: pending.length,
         ),
       );
       if (category == null) {

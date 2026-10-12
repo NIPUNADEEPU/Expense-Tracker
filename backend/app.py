@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import joblib
 from fastapi import FastAPI
@@ -12,6 +13,9 @@ from sklearn import __version__ as sklearn_version
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ML_DIR = BASE_DIR / "ml"
+sys.path.insert(0, str(ML_DIR))
+
+from preprocess import clean_description
 
 MODEL_PATH = ML_DIR / "expense_model.pkl"
 VECTORIZER_PATH = ML_DIR / "tfidf_vectorizer.pkl"
@@ -76,7 +80,7 @@ class PredictionRequest(BaseModel):
 
 @app.post("/predict")
 def predict(request: PredictionRequest):
-    description = request.description.strip()
+    description = clean_description(request.description)
 
     if not description:
         return {

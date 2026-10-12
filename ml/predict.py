@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 
 import joblib
+from preprocess import clean_description
 
 
 # ---------------------------------------------------------
@@ -32,7 +33,7 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 
-description = " ".join(sys.argv[1:])
+description = clean_description(" ".join(sys.argv[1:]))
 
 
 # ---------------------------------------------------------

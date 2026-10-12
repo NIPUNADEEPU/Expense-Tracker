@@ -45,6 +45,14 @@ void main() {
       MlApiService.categoryFromPrediction('personal_care'),
       ExpenseCategory.personalCare,
     );
+    expect(
+      MlApiService.categoryFromPrediction('  PERSONAL   CARE  '),
+      ExpenseCategory.personalCare,
+    );
+    expect(
+      MlApiService.categoryFromPrediction('home-improvement'),
+      ExpenseCategory.home,
+    );
     expect(MlApiService.categoryFromPrediction('Food'), ExpenseCategory.food);
     expect(
       MlApiService.categoryFromPrediction('travel'),
@@ -55,5 +63,105 @@ void main() {
       ExpenseCategory.shopping,
     );
     expect(MlApiService.categoryFromPrediction('Unknown'), isNull);
+    expect(MlApiService.categoryFromPrediction('Bills'), ExpenseCategory.bills);
+    expect(
+      MlApiService.categoryFromPrediction('Entertainment'),
+      ExpenseCategory.entertainment,
+    );
+    expect(MlApiService.categoryFromPrediction('Home'), ExpenseCategory.home);
+    expect(
+      MlApiService.categoryFromPrediction('Financial'),
+      ExpenseCategory.financial,
+    );
   });
+
+  test('valid API responses map each supported category', () async {
+    const cases = <String, ExpenseCategory>{
+      'Food': ExpenseCategory.food,
+      'Shopping': ExpenseCategory.shopping,
+      'Travel': ExpenseCategory.travel,
+      'Bills': ExpenseCategory.bills,
+      'Home': ExpenseCategory.home,
+      'Personal Care': ExpenseCategory.personalCare,
+      'Financial': ExpenseCategory.financial,
+      'Entertainment': ExpenseCategory.entertainment,
+    };
+
+    for (final entry in cases.entries) {
+      final client = MockClient((request) async {
+        final requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(requestBody['description'], 'receipt item description');
+        return http.Response(
+          jsonEncode({'category': entry.key, 'confidence': 0.74}),
+          200,
+        );
+      });
+      final service = MlApiService(client: client);
+      final prediction = await service.predictCategory(
+        ' receipt item description ',
+      );
+
+      expect(prediction, isNotNull);
+      expect(
+        MlApiService.resolveCategory(prediction),
+        entry.value,
+        reason: entry.key,
+      );
+      client.close();
+    }
+  });
+
+  test('malformed prediction responses are rejected', () async {
+    final bodies = <String>[
+      '{"category":"Food"}',
+      '{"category":42,"confidence":0.8}',
+      '{"category":"Food","confidence":"high"}',
+      'not json',
+    ];
+
+    for (final body in bodies) {
+      final client = MockClient((_) async => http.Response(body, 200));
+      final service = MlApiService(client: client);
+      expect(await service.predictCategory('coffee'), isNull, reason: body);
+      client.close();
+    }
+  });
+
+  test('failed or unsupported prediction preserves an existing category', () {
+    expect(
+      MlApiService.resolveCategory(
+        null,
+        existingCategory: ExpenseCategory.food,
+      ),
+      ExpenseCategory.food,
+    );
+    expect(
+      MlApiService.resolveCategory(
+        const MlPrediction(category: 'Unknown', confidence: 0.8),
+        existingCategory: ExpenseCategory.shopping,
+      ),
+      ExpenseCategory.shopping,
+    );
+    expect(
+      MlApiService.resolveCategory(
+        null,
+        existingCategory: ExpenseCategory.uncategorized,
+      ),
+      ExpenseCategory.uncategorized,
+    );
+    expect(MlApiService.resolveCategory(null), isNull);
+  });
+
+  test(
+    'returns null on API failure so caller can preserve review category',
+    () async {
+      final mockClient = MockClient(
+        (_) async => http.Response('unavailable', 503),
+      );
+      final service = MlApiService(client: mockClient);
+
+      expect(await service.predictCategory('organic apples'), isNull);
+      mockClient.close();
+    },
+  );
 }
